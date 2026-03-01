@@ -1,0 +1,721 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>bookshelf</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&display=swap">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Inter', sans-serif;
+    background: #fff;
+    color: #000;
+    padding: 1.5rem 2rem;
+  }
+  .zoom-corner {
+    position: fixed;
+    top: 1rem;
+    right: 1.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.72rem;
+    color: #999;
+    z-index: 100;
+  }
+  .zoom-corner input[type=range] {
+    width: 90px;
+    accent-color: #000;
+    cursor: pointer;
+  }
+  #zoom-label { min-width: 3ch; }
+  #view-toggle {
+    font-family: inherit;
+    font-size: 0.85rem;
+    background: none;
+    border: 1px solid #ccc;
+    border-radius: 2px;
+    cursor: pointer;
+    padding: 1px 6px;
+    color: #555;
+    line-height: 1.4;
+  }
+  #view-toggle:hover { border-color: #000; color: #000; }
+
+  .filter-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    align-items: center;
+  }
+  #kind-bar { margin-bottom: 0.6rem; }
+  #read-bar { margin-bottom: 0.6rem; }
+  #tag-bar  { margin-bottom: 1.5rem; }
+  .bar-label {
+    font-size: 0.7rem;
+    color: #999;
+    width: 2.5rem;
+    flex-shrink: 0;
+  }
+  .tag-btn, .kind-btn, .read-btn, .sort-btn {
+    font-family: inherit;
+    font-size: 0.7rem;
+    padding: 3px 10px;
+    border: 1px solid #ccc;
+    background: #fff;
+    cursor: pointer;
+    border-radius: 2px;
+    color: #555;
+    transition: background 0.1s, color 0.1s, border-color 0.1s;
+    user-select: none;
+  }
+  .tag-btn.active, .kind-btn.active, .read-btn.active, .sort-btn.active {
+    background: #000;
+    color: #fff;
+    border-color: #000;
+  }
+  #clear-tags {
+    font-family: inherit;
+    font-size: 0.7rem;
+    color: #bbb;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 3px 4px;
+    text-decoration: underline;
+  }
+
+  .shelf {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, var(--col-w, 160px));
+    gap: 1.5rem;
+  }
+  .shelf.list {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+  .book {
+    display: flex;
+    flex-direction: column;
+    text-decoration: none;
+    color: inherit;
+  }
+  .book[hidden] { display: none; }
+
+  .shelf.list .book {
+    flex-direction: row;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid #f0f0f0;
+    cursor: pointer;
+  }
+  .shelf.list .book:hover .book-title { text-decoration: underline; }
+  .shelf.list .thumb {
+    width: 36px;
+    aspect-ratio: 3 / 4;
+    flex-shrink: 0;
+  }
+  .shelf.list .badge { display: none; }
+  .shelf.list .book-title {
+    margin-top: 0;
+    font-size: 0.8rem;
+    flex: 1;
+  }
+  .shelf.list .chips { margin-top: 0; }
+  #sort-bar { margin-bottom: 1.5rem; }
+
+  .thumb {
+    display: block;
+    width: 100%;
+    aspect-ratio: 3 / 4;
+    overflow: hidden;
+    border: 1px solid #ddd;
+    background: #fafafa;
+    position: relative;
+  }
+  .thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: top center;
+    display: block;
+    transition: opacity 0.15s;
+  }
+  .thumb:hover img { opacity: 0.85; }
+
+  .badge {
+    position: absolute;
+    font-size: 0.6rem;
+    font-weight: 500;
+    padding: 2px 6px;
+    border-radius: 2px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    pointer-events: none;
+  }
+  .kind-badge {
+    top: 6px;
+    left: 6px;
+    background: #000;
+    color: #fff;
+  }
+  .read-badge {
+    bottom: 6px;
+    right: 6px;
+    background: #000;
+    color: #fff;
+  }
+  .read-badge.unread {
+    background: transparent;
+    color: #aaa;
+    border: 1px solid #ddd;
+  }
+
+  .book-title {
+    margin-top: 0.4rem;
+    font-size: 0.68rem;
+    line-height: 1.4;
+    color: #000;
+  }
+  .chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 3px;
+    margin-top: 0.3rem;
+  }
+  .chip {
+    font-size: 0.6rem;
+    color: #888;
+    border: 1px solid #e0e0e0;
+    padding: 1px 5px;
+    border-radius: 2px;
+  }
+</style>
+</head>
+<body>
+<div class="zoom-corner">
+  <button id="view-toggle" title="toggle view">☰</button>
+  <input type="range" id="zoom" min="100" max="320" value="160" step="10">
+  <span id="zoom-label">160</span>
+</div>
+
+<div class="filter-bar" id="read-bar">
+  <span class="bar-label">read</span>
+  <button class="read-btn active" data-read="all">all</button>
+  <button class="read-btn" data-read="read">read</button>
+  <button class="read-btn" data-read="unread">unread</button>
+</div>
+<div class="filter-bar" id="kind-bar">
+  <span class="bar-label">type</span>
+  <button class="kind-btn active" data-kind="all">all</button><button class="kind-btn" data-kind="book">book</button><button class="kind-btn" data-kind="paper">paper</button><button class="kind-btn" data-kind="video">video</button><button class="kind-btn" data-kind="web">web</button>
+</div>
+<div class="filter-bar" id="tag-bar">
+  <span class="bar-label">tags</span>
+  <button class="tag-btn" data-tag="algo">algo</button><button class="tag-btn" data-tag="concurrency">concurrency</button><button class="tag-btn" data-tag="emulation">emulation</button><button class="tag-btn" data-tag="graphics">graphics</button><button class="tag-btn" data-tag="math">math</button><button class="tag-btn" data-tag="misc">misc</button><button class="tag-btn" data-tag="ml">ml</button><button class="tag-btn" data-tag="physics">physics</button><button class="tag-btn" data-tag="procgen">procgen</button><button class="tag-btn" data-tag="ui">ui</button>
+  <button id="clear-tags">clear</button>
+</div>
+
+<div class="filter-bar" id="sort-bar">
+  <span class="bar-label">sort</span>
+  <button class="sort-btn active" data-sort="default">default</button>
+  <button class="sort-btn" data-sort="name">name</button>
+  <button class="sort-btn" data-sort="tags">tags</button>
+</div>
+
+<div class="shelf" id="shelf">
+    <a class="book" data-idx="0" data-tags='["graphics"]' data-kind="paper" data-title="Gravitational Lensing by Spinning Black Holes in Astrophysics, and in the Movie Interstellar" data-tagstr="graphics" href="https://arxiv.org/pdf/1502.03808" target="_blank" rel="noopener">
+      <div class="thumb">
+        <img src="thumbnails/48f1a2176f92271ade4a6c6970da3113.png" alt="Gravitational Lensing by Spinning Black Holes in Astrophysics, and in the Movie Interstellar">
+        <span class="badge kind-badge">paper</span>
+        <span class="badge read-badge unread">unread</span>
+      </div>
+      <p class="book-title">Gravitational Lensing by Spinning Black Holes in Astrophysics, and in the Movie Interstellar</p>
+      <div class="chips"><span class="chip">graphics</span></div>
+    </a>
+    <a class="book read" data-idx="1" data-tags='["graphics"]' data-kind="paper" data-title="Physically Based Real-Time Rendering of Eclipses" data-tagstr="graphics" href="pdf/cgf70017.pdf" target="_blank" rel="noopener">
+      <div class="thumb">
+        <img src="thumbnails/bb96ea1c457842e4c429cfcf05d91f66.png" alt="Physically Based Real-Time Rendering of Eclipses">
+        <span class="badge kind-badge">paper</span>
+        <span class="badge read-badge">read</span>
+      </div>
+      <p class="book-title">Physically Based Real-Time Rendering of Eclipses</p>
+      <div class="chips"><span class="chip">graphics</span></div>
+    </a>
+    <a class="book" data-idx="2" data-tags='["algo", "concurrency"]' data-kind="paper" data-title="What every systems programmer should know about concurrency" data-tagstr="algo,concurrency" href="https://assets.bitbashing.io/papers/concurrency-primer.pdf" target="_blank" rel="noopener">
+      <div class="thumb">
+        <img src="thumbnails/6f8ddb8e97040a28e7b1ff677788d2a1.png" alt="What every systems programmer should know about concurrency">
+        <span class="badge kind-badge">paper</span>
+        <span class="badge read-badge unread">unread</span>
+      </div>
+      <p class="book-title">What every systems programmer should know about concurrency</p>
+      <div class="chips"><span class="chip">algo</span><span class="chip">concurrency</span></div>
+    </a>
+    <a class="book" data-idx="3" data-tags='["emulation"]' data-kind="web" data-title="DMG-01: How to Emulate a Game Boy" data-tagstr="emulation" href="https://rylev.github.io/DMG-01/public/book/" target="_blank" rel="noopener">
+      <div class="thumb">
+        <img src="thumbnails/137171a324cd7536eb5cf13aa5546a2f.png" alt="DMG-01: How to Emulate a Game Boy">
+        <span class="badge kind-badge">web</span>
+        <span class="badge read-badge unread">unread</span>
+      </div>
+      <p class="book-title">DMG-01: How to Emulate a Game Boy</p>
+      <div class="chips"><span class="chip">emulation</span></div>
+    </a>
+    <a class="book" data-idx="4" data-tags='["graphics"]' data-kind="web" data-title="Mipmap selection in too much detail" data-tagstr="graphics" href="https://pema.dev/2025/05/09/mipmaps-too-much-detail/" target="_blank" rel="noopener">
+      <div class="thumb">
+        <img src="thumbnails/b75edb7b362f12da38b66fc77c64455b.png" alt="Mipmap selection in too much detail">
+        <span class="badge kind-badge">web</span>
+        <span class="badge read-badge unread">unread</span>
+      </div>
+      <p class="book-title">Mipmap selection in too much detail</p>
+      <div class="chips"><span class="chip">graphics</span></div>
+    </a>
+    <a class="book" data-idx="5" data-tags='["math"]' data-kind="web" data-title="immersive linear algebra" data-tagstr="math" href="https://immersivemath.com/ila/index.html" target="_blank" rel="noopener">
+      <div class="thumb">
+        <img src="thumbnails/e94484e01e1d8d3abfc94bfa177cdc80.png" alt="immersive linear algebra">
+        <span class="badge kind-badge">web</span>
+        <span class="badge read-badge unread">unread</span>
+      </div>
+      <p class="book-title">immersive linear algebra</p>
+      <div class="chips"><span class="chip">math</span></div>
+    </a>
+    <a class="book" data-idx="6" data-tags='["graphics"]' data-kind="web" data-title="Temporal AA and the Quest for the Holy Trail" data-tagstr="graphics" href="https://www.elopezr.com/temporal-aa-and-the-quest-for-the-holy-trail/" target="_blank" rel="noopener">
+      <div class="thumb">
+        <img src="thumbnails/de82fc762988ad55e2f23e351bee4512.png" alt="Temporal AA and the Quest for the Holy Trail">
+        <span class="badge kind-badge">web</span>
+        <span class="badge read-badge unread">unread</span>
+      </div>
+      <p class="book-title">Temporal AA and the Quest for the Holy Trail</p>
+      <div class="chips"><span class="chip">graphics</span></div>
+    </a>
+    <a class="book" data-idx="7" data-tags='["ml"]' data-kind="web" data-title="Crash Course in Deep Learning (for Computer Graphics)" data-tagstr="ml" href="https://gpuopen.com/learn/deep_learning_crash_course/" target="_blank" rel="noopener">
+      <div class="thumb">
+        <img src="thumbnails/e0860e544e3393b088c97105e396f722.png" alt="Crash Course in Deep Learning (for Computer Graphics)">
+        <span class="badge kind-badge">web</span>
+        <span class="badge read-badge unread">unread</span>
+      </div>
+      <p class="book-title">Crash Course in Deep Learning (for Computer Graphics)</p>
+      <div class="chips"><span class="chip">ml</span></div>
+    </a>
+    <a class="book" data-idx="8" data-tags='["algo"]' data-kind="book" data-title="Algorithms by Jeff Erickson" data-tagstr="algo" href="https://jeffe.cs.illinois.edu/teaching/algorithms/book/Algorithms-JeffE.pdf" target="_blank" rel="noopener">
+      <div class="thumb">
+        <img src="thumbnails/0a3f4fe095e5a66578e1abd3fa7d286e.png" alt="Algorithms by Jeff Erickson">
+        <span class="badge kind-badge">book</span>
+        <span class="badge read-badge unread">unread</span>
+      </div>
+      <p class="book-title">Algorithms by Jeff Erickson</p>
+      <div class="chips"><span class="chip">algo</span></div>
+    </a>
+    <a class="book read" data-idx="9" data-tags='["procgen"]' data-kind="web" data-title="Algorithms for making interesting organic simulations" data-tagstr="procgen" href="https://bleuje.com/physarum-explanation/" target="_blank" rel="noopener">
+      <div class="thumb">
+        <img src="thumbnails/b47bd753e78221ec0e7284ea70ecfdc8.png" alt="Algorithms for making interesting organic simulations">
+        <span class="badge kind-badge">web</span>
+        <span class="badge read-badge">read</span>
+      </div>
+      <p class="book-title">Algorithms for making interesting organic simulations</p>
+      <div class="chips"><span class="chip">procgen</span></div>
+    </a>
+    <a class="book read" data-idx="10" data-tags='["graphics"]' data-kind="web" data-title="Video Game Blurs (and how the best one works)" data-tagstr="graphics" href="https://blog.frost.kiwi/dual-kawase/" target="_blank" rel="noopener">
+      <div class="thumb">
+        <img src="thumbnails/ce24589c2a647689b61f17056b919e61.png" alt="Video Game Blurs (and how the best one works)">
+        <span class="badge kind-badge">web</span>
+        <span class="badge read-badge">read</span>
+      </div>
+      <p class="book-title">Video Game Blurs (and how the best one works)</p>
+      <div class="chips"><span class="chip">graphics</span></div>
+    </a>
+    <a class="book read" data-idx="11" data-tags='["procgen"]' data-kind="paper" data-title="Self-organizing tree models for image synthesis" data-tagstr="procgen" href="https://algorithmicbotany.org/papers/selforg.sig2009.pdf" target="_blank" rel="noopener">
+      <div class="thumb">
+        <img src="thumbnails/b192a175fa095fdc90ee1914d4f59f29.png" alt="Self-organizing tree models for image synthesis">
+        <span class="badge kind-badge">paper</span>
+        <span class="badge read-badge">read</span>
+      </div>
+      <p class="book-title">Self-organizing tree models for image synthesis</p>
+      <div class="chips"><span class="chip">procgen</span></div>
+    </a>
+    <a class="book" data-idx="12" data-tags='["procgen"]' data-kind="web" data-title="Oceans: Theory to Implementation" data-tagstr="procgen" href="https://gikster.dev/posts/Ocean-Simulation/" target="_blank" rel="noopener">
+      <div class="thumb">
+        <img src="thumbnails/78318e1f2007258fd89d0f6bdf543859.png" alt="Oceans: Theory to Implementation">
+        <span class="badge kind-badge">web</span>
+        <span class="badge read-badge unread">unread</span>
+      </div>
+      <p class="book-title">Oceans: Theory to Implementation</p>
+      <div class="chips"><span class="chip">procgen</span></div>
+    </a>
+    <a class="book read" data-idx="13" data-tags='["graphics"]' data-kind="web" data-title="Physically Based Rendering in Filament" data-tagstr="graphics" href="https://google.github.io/filament/Filament.md.html" target="_blank" rel="noopener">
+      <div class="thumb">
+        <img src="thumbnails/cdd31c31cab092e86796a9645b80fcfe.png" alt="Physically Based Rendering in Filament">
+        <span class="badge kind-badge">web</span>
+        <span class="badge read-badge">read</span>
+      </div>
+      <p class="book-title">Physically Based Rendering in Filament</p>
+      <div class="chips"><span class="chip">graphics</span></div>
+    </a>
+    <a class="book read" data-idx="14" data-tags='["misc"]' data-kind="web" data-title="The Absolute Minimum Every Software Developer Must Know About Unicode in 2023 (Still No Excuses!)" data-tagstr="misc" href="https://tonsky.me/blog/unicode/" target="_blank" rel="noopener">
+      <div class="thumb">
+        <img src="thumbnails/fe7aaebf575d652298e466de36430d2e.png" alt="The Absolute Minimum Every Software Developer Must Know About Unicode in 2023 (Still No Excuses!)">
+        <span class="badge kind-badge">web</span>
+        <span class="badge read-badge">read</span>
+      </div>
+      <p class="book-title">The Absolute Minimum Every Software Developer Must Know About Unicode in 2023 (Still No Excuses!)</p>
+      <div class="chips"><span class="chip">misc</span></div>
+    </a>
+    <a class="book read" data-idx="15" data-tags='["graphics"]' data-kind="web" data-title="Ray Tracing in One Weekend" data-tagstr="graphics" href="https://raytracing.github.io/books/RayTracingInOneWeekend.html" target="_blank" rel="noopener">
+      <div class="thumb">
+        <img src="thumbnails/a05941d4e63739d63d7158314bdd05a1.png" alt="Ray Tracing in One Weekend">
+        <span class="badge kind-badge">web</span>
+        <span class="badge read-badge">read</span>
+      </div>
+      <p class="book-title">Ray Tracing in One Weekend</p>
+      <div class="chips"><span class="chip">graphics</span></div>
+    </a>
+    <a class="book" data-idx="16" data-tags='["graphics"]' data-kind="web" data-title="The Hitchhiker's Guide to Digital Colour" data-tagstr="graphics" href="https://hg2dc.com/" target="_blank" rel="noopener">
+      <div class="thumb">
+        <img src="thumbnails/dd0b611faf74dd9f709369e4a68494c1.png" alt="The Hitchhiker's Guide to Digital Colour">
+        <span class="badge kind-badge">web</span>
+        <span class="badge read-badge unread">unread</span>
+      </div>
+      <p class="book-title">The Hitchhiker's Guide to Digital Colour</p>
+      <div class="chips"><span class="chip">graphics</span></div>
+    </a>
+    <a class="book" data-idx="17" data-tags='["procgen"]' data-kind="web" data-title="Modeling organic branching structures with the space colonization algorithm and JavaScript" data-tagstr="procgen" href="https://medium.com/@jason.webb/space-colonization-algorithm-in-javascript-6f683b743dc5" target="_blank" rel="noopener">
+      <div class="thumb">
+        <img src="thumbnails/4f768aee3d1d9b2da5cbdb8aee500f44.png" alt="Modeling organic branching structures with the space colonization algorithm and JavaScript">
+        <span class="badge kind-badge">web</span>
+        <span class="badge read-badge unread">unread</span>
+      </div>
+      <p class="book-title">Modeling organic branching structures with the space colonization algorithm and JavaScript</p>
+      <div class="chips"><span class="chip">procgen</span></div>
+    </a>
+    <a class="book read" data-idx="18" data-tags='["graphics"]' data-kind="web" data-title="What every coder should know about gamma" data-tagstr="graphics" href="https://blog.johnnovak.net/2016/09/21/what-every-coder-should-know-about-gamma/" target="_blank" rel="noopener">
+      <div class="thumb">
+        <img src="thumbnails/bd096de6ec6eece3e352cc1e6efc16ca.png" alt="What every coder should know about gamma">
+        <span class="badge kind-badge">web</span>
+        <span class="badge read-badge">read</span>
+      </div>
+      <p class="book-title">What every coder should know about gamma</p>
+      <div class="chips"><span class="chip">graphics</span></div>
+    </a>
+    <a class="book" data-idx="19" data-tags='["graphics"]' data-kind="web" data-title="Rendering the Visible Spectrum" data-tagstr="graphics" href="https://brandonli.net/spectra/doc/" target="_blank" rel="noopener">
+      <div class="thumb">
+        <img src="thumbnails/e2acd2d9165744ae911c6d39ed2a1824.png" alt="Rendering the Visible Spectrum">
+        <span class="badge kind-badge">web</span>
+        <span class="badge read-badge unread">unread</span>
+      </div>
+      <p class="book-title">Rendering the Visible Spectrum</p>
+      <div class="chips"><span class="chip">graphics</span></div>
+    </a>
+    <a class="book read" data-idx="20" data-tags='["graphics"]' data-kind="web" data-title="Casual Shadertoy Path Tracing" data-tagstr="graphics" href="https://blog.demofox.org/2020/05/25/casual-shadertoy-path-tracing-1-basic-camera-diffuse-emissive/" target="_blank" rel="noopener">
+      <div class="thumb">
+        <img src="thumbnails/40cf4b6ede5cceef6265100a775218c7.png" alt="Casual Shadertoy Path Tracing">
+        <span class="badge kind-badge">web</span>
+        <span class="badge read-badge">read</span>
+      </div>
+      <p class="book-title">Casual Shadertoy Path Tracing</p>
+      <div class="chips"><span class="chip">graphics</span></div>
+    </a>
+    <a class="book" data-idx="21" data-tags='["math"]' data-kind="web" data-title="Monte Carlo Crash Course" data-tagstr="math" href="https://thenumb.at/Probability/" target="_blank" rel="noopener">
+      <div class="thumb">
+        <img src="thumbnails/1ca3b9fbf27f50f57c87bea8434c3492.png" alt="Monte Carlo Crash Course">
+        <span class="badge kind-badge">web</span>
+        <span class="badge read-badge unread">unread</span>
+      </div>
+      <p class="book-title">Monte Carlo Crash Course</p>
+      <div class="chips"><span class="chip">math</span></div>
+    </a>
+    <a class="book" data-idx="22" data-tags='["graphics"]' data-kind="paper" data-title="Understanding the Masking-Shadowing Function in Microfacet-Based BRDFs" data-tagstr="graphics" href="https://jcgt.org/published/0003/02/03/paper.pdf" target="_blank" rel="noopener">
+      <div class="thumb">
+        <img src="thumbnails/711d1b0b8327bd86db1d1dbe76b33050.png" alt="Understanding the Masking-Shadowing Function in Microfacet-Based BRDFs">
+        <span class="badge kind-badge">paper</span>
+        <span class="badge read-badge unread">unread</span>
+      </div>
+      <p class="book-title">Understanding the Masking-Shadowing Function in Microfacet-Based BRDFs</p>
+      <div class="chips"><span class="chip">graphics</span></div>
+    </a>
+    <a class="book" data-idx="23" data-tags='["graphics"]' data-kind="paper" data-title="Spherical Harmonic Lighting: The Gritty Details" data-tagstr="graphics" href="https://3dvar.com/Green2003Spherical.pdf" target="_blank" rel="noopener">
+      <div class="thumb">
+        <img src="thumbnails/ef8d8db3ec303580544599015ac96076.png" alt="Spherical Harmonic Lighting: The Gritty Details">
+        <span class="badge kind-badge">paper</span>
+        <span class="badge read-badge unread">unread</span>
+      </div>
+      <p class="book-title">Spherical Harmonic Lighting: The Gritty Details</p>
+      <div class="chips"><span class="chip">graphics</span></div>
+    </a>
+    <a class="book" data-idx="24" data-tags='["graphics"]' data-kind="paper" data-title="Hash Functions for GPU Rendering" data-tagstr="graphics" href="https://jcgt.org/published/0009/03/02/paper.pdf" target="_blank" rel="noopener">
+      <div class="thumb">
+        <img src="thumbnails/db1a040c0133168f57c6855ea7f42423.png" alt="Hash Functions for GPU Rendering">
+        <span class="badge kind-badge">paper</span>
+        <span class="badge read-badge unread">unread</span>
+      </div>
+      <p class="book-title">Hash Functions for GPU Rendering</p>
+      <div class="chips"><span class="chip">graphics</span></div>
+    </a>
+    <a class="book" data-idx="25" data-tags='["graphics"]' data-kind="paper" data-title="Real Shading in Unreal Engine 4" data-tagstr="graphics" href="https://cdn2.unrealengine.com/Resources/files/2013SiggraphPresentationsNotes-26915738.pdf" target="_blank" rel="noopener">
+      <div class="thumb">
+        <img src="thumbnails/8c44967a8b9f041a28ea68aca8821e67.png" alt="Real Shading in Unreal Engine 4">
+        <span class="badge kind-badge">paper</span>
+        <span class="badge read-badge unread">unread</span>
+      </div>
+      <p class="book-title">Real Shading in Unreal Engine 4</p>
+      <div class="chips"><span class="chip">graphics</span></div>
+    </a>
+    <a class="book" data-idx="26" data-tags='["graphics"]' data-kind="paper" data-title="Moving Frostbite to Physically Based Rendering 3.0" data-tagstr="graphics" href="https://seblagarde.wordpress.com/wp-content/uploads/2015/07/course_notes_moving_frostbite_to_pbr_v32.pdf" target="_blank" rel="noopener">
+      <div class="thumb">
+        <img src="thumbnails/cce83b27c7aa614ceb372248e228fc5d.png" alt="Moving Frostbite to Physically Based Rendering 3.0">
+        <span class="badge kind-badge">paper</span>
+        <span class="badge read-badge unread">unread</span>
+      </div>
+      <p class="book-title">Moving Frostbite to Physically Based Rendering 3.0</p>
+      <div class="chips"><span class="chip">graphics</span></div>
+    </a>
+    <a class="book" data-idx="27" data-tags='["graphics"]' data-kind="paper" data-title="Multiple-Scattering Microfacet BSDFs with the Smith Model" data-tagstr="graphics" href="https://jo.dreggn.org/home/2016_microfacets.pdf" target="_blank" rel="noopener">
+      <div class="thumb">
+        <img src="thumbnails/23251f9c3ca9195a388bebf67baed7a9.png" alt="Multiple-Scattering Microfacet BSDFs with the Smith Model">
+        <span class="badge kind-badge">paper</span>
+        <span class="badge read-badge unread">unread</span>
+      </div>
+      <p class="book-title">Multiple-Scattering Microfacet BSDFs with the Smith Model</p>
+      <div class="chips"><span class="chip">graphics</span></div>
+    </a>
+    <a class="book" data-idx="28" data-tags='["graphics"]' data-kind="web" data-title="Notes on Physically Based Rendering" data-tagstr="graphics" href="https://rtarun9.github.io/blogs/physically_based_rendering/" target="_blank" rel="noopener">
+      <div class="thumb">
+        <img src="thumbnails/6eece4d20b9b632d509d36625face1bb.png" alt="Notes on Physically Based Rendering">
+        <span class="badge kind-badge">web</span>
+        <span class="badge read-badge unread">unread</span>
+      </div>
+      <p class="book-title">Notes on Physically Based Rendering</p>
+      <div class="chips"><span class="chip">graphics</span></div>
+    </a>
+    <a class="book" data-idx="29" data-tags='["graphics"]' data-kind="paper" data-title="Crash Course in BRDF Implementation" data-tagstr="graphics" href="https://boksajak.github.io/files/CrashCourseBRDF.pdf" target="_blank" rel="noopener">
+      <div class="thumb">
+        <img src="thumbnails/1965ce675d9bae4176a57276642379ae.png" alt="Crash Course in BRDF Implementation">
+        <span class="badge kind-badge">paper</span>
+        <span class="badge read-badge unread">unread</span>
+      </div>
+      <p class="book-title">Crash Course in BRDF Implementation</p>
+      <div class="chips"><span class="chip">graphics</span></div>
+    </a>
+    <a class="book" data-idx="30" data-tags='["graphics"]' data-kind="web" data-title="Quantifying Colour" data-tagstr="graphics" href="https://ekunazanu.foo/lab/quantifying-colour/" target="_blank" rel="noopener">
+      <div class="thumb">
+        <img src="thumbnails/95ef4fd1b8984fb826c23494b821df5e.png" alt="Quantifying Colour">
+        <span class="badge kind-badge">web</span>
+        <span class="badge read-badge unread">unread</span>
+      </div>
+      <p class="book-title">Quantifying Colour</p>
+      <div class="chips"><span class="chip">graphics</span></div>
+    </a>
+    <a class="book read" data-idx="31" data-tags='["graphics"]' data-kind="paper" data-title="Fundamentals of Physically Based Shading" data-tagstr="graphics" href="https://blog.selfshadow.com/publications/s2025-shading-course/hoffman/s2025_pbs_hoffman_slides.pdf" target="_blank" rel="noopener">
+      <div class="thumb">
+        <img src="thumbnails/51e8cf01c20c2a3c74806f13c2ddce1d.png" alt="Fundamentals of Physically Based Shading">
+        <span class="badge kind-badge">paper</span>
+        <span class="badge read-badge">read</span>
+      </div>
+      <p class="book-title">Fundamentals of Physically Based Shading</p>
+      <div class="chips"><span class="chip">graphics</span></div>
+    </a>
+    <a class="book read" data-idx="32" data-tags='["ui"]' data-kind="video" data-title="How Clay's UI Layout Algorithm Works" data-tagstr="ui" href="https://www.youtube.com/watch?v=by9lQvpvMIc" target="_blank" rel="noopener">
+      <div class="thumb">
+        <img src="thumbnails/10798fe3de64550e54b6e04e03a98921.png" alt="How Clay's UI Layout Algorithm Works">
+        <span class="badge kind-badge">video</span>
+        <span class="badge read-badge">read</span>
+      </div>
+      <p class="book-title">How Clay's UI Layout Algorithm Works</p>
+      <div class="chips"><span class="chip">ui</span></div>
+    </a>
+    <a class="book" data-idx="33" data-tags='["graphics"]' data-kind="web" data-title="Shadowmap Bias" data-tagstr="graphics" href="https://renderdiagrams.org/2024/12/18/shadowmap-bias/" target="_blank" rel="noopener">
+      <div class="thumb">
+        <img src="thumbnails/9b9df5cc782cc717281b345be053be4a.png" alt="Shadowmap Bias">
+        <span class="badge kind-badge">web</span>
+        <span class="badge read-badge unread">unread</span>
+      </div>
+      <p class="book-title">Shadowmap Bias</p>
+      <div class="chips"><span class="chip">graphics</span></div>
+    </a>
+    <a class="book" data-idx="34" data-tags='["graphics"]' data-kind="web" data-title="Demystifying multiple importance sampling" data-tagstr="graphics" href="https://lisyarus.github.io/blog/posts/multiple-importance-sampling.html" target="_blank" rel="noopener">
+      <div class="thumb">
+        <img src="thumbnails/e4fd259a22d2b645461bb3ff005a2613.png" alt="Demystifying multiple importance sampling">
+        <span class="badge kind-badge">web</span>
+        <span class="badge read-badge unread">unread</span>
+      </div>
+      <p class="book-title">Demystifying multiple importance sampling</p>
+      <div class="chips"><span class="chip">graphics</span></div>
+    </a>
+    <a class="book" data-idx="35" data-tags='["math", "physics"]' data-kind="video" data-title="The 4 Maxwell Equations. Get the Deepest Intuition!" data-tagstr="math,physics" href="https://www.youtube.com/watch?v=hJD8ywGrXks" target="_blank" rel="noopener">
+      <div class="thumb">
+        <img src="thumbnails/d3a73cb0febb4e6b3008d7933c5d49cf.png" alt="The 4 Maxwell Equations. Get the Deepest Intuition!">
+        <span class="badge kind-badge">video</span>
+        <span class="badge read-badge unread">unread</span>
+      </div>
+      <p class="book-title">The 4 Maxwell Equations. Get the Deepest Intuition!</p>
+      <div class="chips"><span class="chip">math</span><span class="chip">physics</span></div>
+    </a>
+    <a class="book read" data-idx="36" data-tags='["graphics"]' data-kind="video" data-title="Pondering Orbs: The Rendering and Art Tools of COCOON" data-tagstr="graphics" href="https://www.youtube.com/watch?v=8kS17jt38XQ" target="_blank" rel="noopener">
+      <div class="thumb">
+        <img src="thumbnails/45a5da796ccf13b37d2144e994308935.png" alt="Pondering Orbs: The Rendering and Art Tools of COCOON">
+        <span class="badge kind-badge">video</span>
+        <span class="badge read-badge">read</span>
+      </div>
+      <p class="book-title">Pondering Orbs: The Rendering and Art Tools of COCOON</p>
+      <div class="chips"><span class="chip">graphics</span></div>
+    </a>
+    <a class="book" data-idx="37" data-tags='["graphics"]' data-kind="video" data-title="niagara: Building a Vulkan renderer from scratch*" data-tagstr="graphics" href="https://www.youtube.com/watch?v=BR2my8OE1Sc" target="_blank" rel="noopener">
+      <div class="thumb">
+        <img src="thumbnails/2e09c600eb069213780e995e50547b0e.png" alt="niagara: Building a Vulkan renderer from scratch*">
+        <span class="badge kind-badge">video</span>
+        <span class="badge read-badge unread">unread</span>
+      </div>
+      <p class="book-title">niagara: Building a Vulkan renderer from scratch*</p>
+      <div class="chips"><span class="chip">graphics</span></div>
+    </a>
+    <a class="book" data-idx="38" data-tags='["misc"]' data-kind="web" data-title="Build Your Own Text Editor" data-tagstr="misc" href="https://viewsourcecode.org/snaptoken/kilo/" target="_blank" rel="noopener">
+      <div class="thumb">
+        <img src="thumbnails/8703789eec7bd6264fb0243549095534.png" alt="Build Your Own Text Editor">
+        <span class="badge kind-badge">web</span>
+        <span class="badge read-badge unread">unread</span>
+      </div>
+      <p class="book-title">Build Your Own Text Editor</p>
+      <div class="chips"><span class="chip">misc</span></div>
+    </a>
+    <a class="book" data-idx="39" data-tags='["graphics"]' data-kind="paper" data-title="Photorealistic Surface Rendering with Microfacet Theory" data-tagstr="graphics" href="pdf/TH2015DupuyJonathan2.pdf" target="_blank" rel="noopener">
+      <div class="thumb">
+        <img src="thumbnails/dc71157fe6881a463e7451e2d55e40a2.png" alt="Photorealistic Surface Rendering with Microfacet Theory">
+        <span class="badge kind-badge">paper</span>
+        <span class="badge read-badge unread">unread</span>
+      </div>
+      <p class="book-title">Photorealistic Surface Rendering with Microfacet Theory</p>
+      <div class="chips"><span class="chip">graphics</span></div>
+    </a>
+    <a class="book" data-idx="40" data-tags='["graphics"]' data-kind="web" data-title="Billions of triangles in minutes" data-tagstr="graphics" href="https://zeux.io/2025/09/30/billions-of-triangles-in-minutes/" target="_blank" rel="noopener">
+      <div class="thumb">
+        <img src="thumbnails/a4e2c3fab0785e208fba0dc912c5b659.png" alt="Billions of triangles in minutes">
+        <span class="badge kind-badge">web</span>
+        <span class="badge read-badge unread">unread</span>
+      </div>
+      <p class="book-title">Billions of triangles in minutes</p>
+      <div class="chips"><span class="chip">graphics</span></div>
+    </a>
+    <a class="book" data-idx="41" data-tags='["graphics"]' data-kind="web" data-title="“The G in GPU is for Graphics damnit!”: Adventures in Triton Kernels, Profiling, Parallelism and More" data-tagstr="graphics" href="https://ut21.github.io/blog/triton.html" target="_blank" rel="noopener">
+      <div class="thumb">
+        <img src="thumbnails/4350d5d6529847119e6bb1b5b5c0ba76.png" alt="“The G in GPU is for Graphics damnit!”: Adventures in Triton Kernels, Profiling, Parallelism and More">
+        <span class="badge kind-badge">web</span>
+        <span class="badge read-badge unread">unread</span>
+      </div>
+      <p class="book-title">“The G in GPU is for Graphics damnit!”: Adventures in Triton Kernels, Profiling, Parallelism and More</p>
+      <div class="chips"><span class="chip">graphics</span></div>
+    </a>
+    <a class="book" data-idx="42" data-tags='["graphics"]' data-kind="web" data-title="A series of tricks and techniques I learned doing tiny GLSL demos" data-tagstr="graphics" href="https://blog.pkh.me/p/48-a-series-of-tricks-and-techniques-i-learned-doing-tiny-glsl-demos.html" target="_blank" rel="noopener">
+      <div class="thumb">
+        <img src="thumbnails/0b4bdb351883edc8ea47466d4083b256.png" alt="A series of tricks and techniques I learned doing tiny GLSL demos">
+        <span class="badge kind-badge">web</span>
+        <span class="badge read-badge unread">unread</span>
+      </div>
+      <p class="book-title">A series of tricks and techniques I learned doing tiny GLSL demos</p>
+      <div class="chips"><span class="chip">graphics</span></div>
+    </a>
+    <a class="book" data-idx="43" data-tags='["graphics"]' data-kind="video" data-title="ExileCon 2023 - Rendering Path of Exile 2" data-tagstr="graphics" href="https://www.youtube.com/watch?v=TrHHTQqmAaM" target="_blank" rel="noopener">
+      <div class="thumb">
+        <img src="thumbnails/b1eb281c74abb17e01276876f00e5676.png" alt="ExileCon 2023 - Rendering Path of Exile 2">
+        <span class="badge kind-badge">video</span>
+        <span class="badge read-badge unread">unread</span>
+      </div>
+      <p class="book-title">ExileCon 2023 - Rendering Path of Exile 2</p>
+      <div class="chips"><span class="chip">graphics</span></div>
+    </a>
+</div>
+
+<script>
+  const shelf      = document.getElementById('shelf');
+  const slider     = document.getElementById('zoom');
+  const zoomLbl    = document.getElementById('zoom-label');
+  const tagBar     = document.getElementById('tag-bar');
+  const clearBtn   = document.getElementById('clear-tags');
+  const readBar    = document.getElementById('read-bar');
+  const kindBtns   = document.querySelectorAll('.kind-btn');
+  const sortBtns   = document.querySelectorAll('.sort-btn');
+  const viewToggle = document.getElementById('view-toggle');
+
+  let activeTags = new Set();
+  let activeKind = 'all';
+  let activeRead = 'all';
+  let activeSort = 'default';
+  let isList     = false;
+
+  viewToggle.addEventListener('click', () => {
+    isList = !isList;
+    shelf.classList.toggle('list', isList);
+    viewToggle.textContent = isList ? '⊞' : '☰';
+  });
+
+  function applyFilters() {
+    document.querySelectorAll('.book').forEach(b => {
+      const tags   = JSON.parse(b.dataset.tags || '[]');
+      const kind   = b.dataset.kind;
+      const isRead = b.classList.contains('read');
+      const tagOk  = activeTags.size === 0 || [...activeTags].every(t => tags.includes(t));
+      const kindOk = activeKind === 'all' || kind === activeKind;
+      const readOk = activeRead === 'all'
+                   || (activeRead === 'read'   &&  isRead)
+                   || (activeRead === 'unread' && !isRead);
+      b.hidden = !(tagOk && kindOk && readOk);
+    });
+    tagBar.querySelectorAll('.tag-btn').forEach(btn =>
+      btn.classList.toggle('active', activeTags.has(btn.dataset.tag))
+    );
+  }
+
+  function applySort() {
+    const books = [...shelf.querySelectorAll('.book')];
+    if (activeSort === 'default') {
+      books.sort((a, b) => +a.dataset.idx - +b.dataset.idx);
+    } else if (activeSort === 'name') {
+      books.sort((a, b) => a.dataset.title.localeCompare(b.dataset.title));
+    } else if (activeSort === 'tags') {
+      books.sort((a, b) => a.dataset.tagstr.localeCompare(b.dataset.tagstr));
+    }
+    books.forEach(b => shelf.appendChild(b));
+  }
+
+  slider.addEventListener('input', () => {
+    zoomLbl.textContent = slider.value;
+    shelf.style.setProperty('--col-w', slider.value + 'px');
+  });
+
+  readBar.addEventListener('click', e => {
+    const btn = e.target.closest('.read-btn');
+    if (!btn) return;
+    document.querySelectorAll('.read-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    activeRead = btn.dataset.read;
+    applyFilters();
+  });
+
+  tagBar.addEventListener('click', e => {
+    const btn = e.target.closest('.tag-btn');
+    if (!btn) return;
+    if (activeTags.has(btn.dataset.tag)) activeTags.delete(btn.dataset.tag);
+    else activeTags.add(btn.dataset.tag);
+    applyFilters();
+  });
+
+  clearBtn.addEventListener('click', () => {
+    activeTags.clear();
+    applyFilters();
+  });
+
+  kindBtns.forEach(btn => btn.addEventListener('click', () => {
+    kindBtns.forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    activeKind = btn.dataset.kind;
+    applyFilters();
+  }));
+
+  sortBtns.forEach(btn => btn.addEventListener('click', () => {
+    sortBtns.forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    activeSort = btn.dataset.sort;
+    applySort();
+  }));
+</script>
+</body>
+</html>

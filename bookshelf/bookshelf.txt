@@ -1,0 +1,238 @@
+Gravitational Lensing by Spinning Black Holes in Astrophysics, and in the Movie Interstellar
+paper
+https://arxiv.org/pdf/1502.03808
+graphics
+
+Physically Based Real-Time Rendering of Eclipses
+paper
+read
+local
+pdf/cgf70017.pdf
+graphics
+
+What every systems programmer should know about concurrency
+paper
+https://assets.bitbashing.io/papers/concurrency-primer.pdf
+algo,concurrency
+
+DMG-01: How to Emulate a Game Boy
+web
+https://rylev.github.io/DMG-01/public/book/
+emulation
+
+Mipmap selection in too much detail
+web
+https://pema.dev/2025/05/09/mipmaps-too-much-detail/
+graphics
+
+immersive linear algebra
+web
+https://immersivemath.com/ila/index.html
+math
+
+Graphics Pipelines for Young Bloods
+web
+https://www.jeremyong.com/cpp/2021/05/20/graphics-pipelines-for-young-bloods/
+graphics
+
+Temporal AA and the Quest for the Holy Trail
+web
+https://www.elopezr.com/temporal-aa-and-the-quest-for-the-holy-trail/
+graphics
+
+Crash Course in Deep Learning (for Computer Graphics)
+web
+https://gpuopen.com/learn/deep_learning_crash_course/
+ml
+
+Algorithms by Jeff Erickson
+book
+https://jeffe.cs.illinois.edu/teaching/algorithms/book/Algorithms-JeffE.pdf
+algo
+
+Algorithms for making interesting organic simulations
+web
+read
+https://bleuje.com/physarum-explanation/
+procgen
+
+Video Game Blurs (and how the best one works)
+web
+read
+https://blog.frost.kiwi/dual-kawase/
+graphics
+
+Self-organizing tree models for image synthesis
+paper
+read
+https://algorithmicbotany.org/papers/selforg.sig2009.pdf
+procgen
+
+Oceans: Theory to Implementation
+web
+https://gikster.dev/posts/Ocean-Simulation/
+procgen
+
+Physically Based Rendering in Filament
+web
+read
+https://google.github.io/filament/Filament.md.html
+graphics
+
+The Absolute Minimum Every Software Developer Must Know About Unicode in 2023 (Still No Excuses!)
+web
+read
+https://tonsky.me/blog/unicode/
+misc
+
+Ray Tracing in One Weekend
+web
+read
+https://raytracing.github.io/books/RayTracingInOneWeekend.html
+graphics
+
+The Hitchhiker's Guide to Digital Colour
+web
+https://hg2dc.com/
+graphics
+
+Modeling organic branching structures with the space colonization algorithm and JavaScript
+web
+https://medium.com/@jason.webb/space-colonization-algorithm-in-javascript-6f683b743dc5
+procgen
+
+What every coder should know about gamma
+web
+read
+https://blog.johnnovak.net/2016/09/21/what-every-coder-should-know-about-gamma/
+graphics
+
+Rendering the Visible Spectrum
+web
+https://brandonli.net/spectra/doc/
+graphics
+
+Casual Shadertoy Path Tracing
+web
+read
+https://blog.demofox.org/2020/05/25/casual-shadertoy-path-tracing-1-basic-camera-diffuse-emissive/
+graphics
+
+Monte Carlo Crash Course
+web
+https://thenumb.at/Probability/
+math
+
+Understanding the Masking-Shadowing Function in Microfacet-Based BRDFs
+paper
+https://jcgt.org/published/0003/02/03/paper.pdf
+graphics
+
+Spherical Harmonic Lighting: The Gritty Details
+paper
+https://3dvar.com/Green2003Spherical.pdf
+graphics
+
+Hash Functions for GPU Rendering
+paper
+https://jcgt.org/published/0009/03/02/paper.pdf
+graphics
+
+Real Shading in Unreal Engine 4
+paper
+https://cdn2.unrealengine.com/Resources/files/2013SiggraphPresentationsNotes-26915738.pdf
+graphics
+
+Moving Frostbite to Physically Based Rendering 3.0
+paper
+https://seblagarde.wordpress.com/wp-content/uploads/2015/07/course_notes_moving_frostbite_to_pbr_v32.pdf
+graphics
+
+Multiple-Scattering Microfacet BSDFs with the Smith Model
+paper
+https://jo.dreggn.org/home/2016_microfacets.pdf
+graphics
+
+Notes on Physically Based Rendering
+web
+https://rtarun9.github.io/blogs/physically_based_rendering/
+graphics
+
+Crash Course in BRDF Implementation
+paper
+https://boksajak.github.io/files/CrashCourseBRDF.pdf
+graphics
+
+Quantifying Colour
+web
+https://ekunazanu.foo/lab/quantifying-colour/
+graphics
+
+Fundamentals of Physically Based Shading
+paper
+read
+https://blog.selfshadow.com/publications/s2025-shading-course/hoffman/s2025_pbs_hoffman_slides.pdf
+graphics
+
+How Clay's UI Layout Algorithm Works
+video
+read
+https://www.youtube.com/watch?v=by9lQvpvMIc
+ui
+
+Shadowmap Bias
+web
+https://renderdiagrams.org/2024/12/18/shadowmap-bias/
+graphics
+
+Demystifying multiple importance sampling
+web
+https://lisyarus.github.io/blog/posts/multiple-importance-sampling.html
+graphics
+
+The 4 Maxwell Equations. Get the Deepest Intuition!
+video
+https://www.youtube.com/watch?v=hJD8ywGrXks
+math,physics
+
+Pondering Orbs: The Rendering and Art Tools of COCOON
+video
+read
+https://www.youtube.com/watch?v=8kS17jt38XQ
+graphics
+
+niagara: Building a Vulkan renderer from scratch*
+video
+https://www.youtube.com/watch?v=BR2my8OE1Sc
+graphics
+
+Build Your Own Text Editor
+web
+https://viewsourcecode.org/snaptoken/kilo/
+misc
+
+Photorealistic Surface Rendering with Microfacet Theory
+paper
+local
+pdf/TH2015DupuyJonathan2.pdf
+graphics
+
+Billions of triangles in minutes
+web
+https://zeux.io/2025/09/30/billions-of-triangles-in-minutes/
+graphics
+
+“The G in GPU is for Graphics damnit!”: Adventures in Triton Kernels, Profiling, Parallelism and More
+web
+https://ut21.github.io/blog/triton.html
+graphics
+
+A series of tricks and techniques I learned doing tiny GLSL demos
+web
+https://blog.pkh.me/p/48-a-series-of-tricks-and-techniques-i-learned-doing-tiny-glsl-demos.html
+graphics
+
+ExileCon 2023 - Rendering Path of Exile 2
+video
+https://www.youtube.com/watch?v=TrHHTQqmAaM
+graphics

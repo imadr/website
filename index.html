@@ -1,317 +1,414 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="utf-8">
     <link rel="icon" type="image/x-icon" href="/favicon.ico">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>imadr</title>
+    <link rel="alternate" type="application/rss+xml" title="RSS" href="/rss.xml">
+
+    <title>Imad Rahmoune | Graphics Programmer</title>
+
+    <meta name="description" content="Software developer with an interest in graphics programming, game dev and making interactive articles.">
+    <meta name="author" content="Imad Rahmoune">
+    <meta name="robots" content="index, follow">
+    <link rel="canonical" href="https://imadrahmoune.com/">
+
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://imadrahmoune.com/">
+    <meta property="og:title" content="Imad Rahmoune | Graphics Programmer">
+    <meta property="og:description" content="Software developer with an interest in graphics programming, game dev and making interactive articles.">
+    <meta property="og:site_name" content="Imad Rahmoune">
+    <meta property="og:image" content="https://imadrahmoune.com/og-image.png">
+
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:url" content="https://imadrahmoune.com/">
+    <meta name="twitter:title" content="Imad Rahmoune | Graphics Programmer">
+    <meta name="twitter:description" content="Software developer with an interest in graphics programming, game dev and making interactive articles.">
+    <meta name="twitter:image" content="https://imadrahmoune.com/og-image.png">
+
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "Person",
+      "name": "Imad Rahmoune",
+      "url": "https://imadrahmoune.com/",
+      "jobTitle": "Graphics Programmer",
+      "description": "Software developer with an interest in graphics programming, game dev and making interactive articles."
+    }
+    </script>
+
+    <meta name="robots" content="index, follow">
+
     <link rel="stylesheet" href="/css/style.css">
     <style>
-        .projects{
-            display: grid;
-            gap: 0.9rem;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
         }
-        @media(max-width:900px){
-            .projects{
-                grid-template-columns: repeat(1, minmax(0, 1fr));
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: var(--color-bg-1);
+            color: var(--color-fg-1);
+            line-height: 1.6;
+            padding: 2.5rem 1.5rem;
+            max-width: 680px;
+            margin: 0 auto;
+        }
+
+        header {
+            margin-bottom: 2.5rem;
+        }
+        nav{
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        nav #title {
+            font-size: 2rem;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+        }
+
+        .bio {
+            margin-bottom: 0.5rem;
+            color: var(--color-fg-1);
+        }
+
+        .contact {
+            color: var(--color-muted);
+            font-size: 0.95rem;
+        }
+
+        a {
+            color: var(--color-href);
+            text-decoration: none;
+        }
+
+        a:hover {
+            text-decoration: underline;
+        }
+
+        .projects {
+            margin-top: 2rem;
+        }
+
+        .project {
+            margin-bottom: 0.35rem;
+            display: flex;
+            gap: 0.75rem;
+            padding: 0.4rem 0;
+        }
+
+        .project-link {
+            flex: 1;
+            display: flex;
+            gap: 0.75rem;
+            align-items: baseline;
+        }
+
+        .project-title {
+            color: var(--color-fg-1);
+            flex: 1;
+        }
+
+        .project-title:hover {
+            color: var(--color-href);
+        }
+
+        .tags {
+            display: flex;
+            gap: 0.4rem;
+            flex-wrap: wrap;
+            align-items: baseline;
+        }
+
+        .tag {
+            font-size: 0.8rem;
+            padding: 0.15rem 0.5rem;
+            border-radius: 3px;
+            font-weight: 500;
+            white-space: nowrap;
+        }
+
+        .tag-rendering {
+            background: #ffebee;
+            color: #c62828;
+        }
+
+        .tag-graphics {
+            background: #e3f2fd;
+            color: #1565c0;
+        }
+
+        .tag-shaders {
+            background: #f3e5f5;
+            color: #6a1b9a;
+        }
+
+        .tag-article {
+            background: #e8f5e9;
+            color: #2e7d32;
+        }
+
+        .tag-interactive {
+            background: #fff3e0;
+            color: #e65100;
+        }
+
+        .tag-math {
+            background: #fce4ec;
+            color: #ad1457;
+        }
+
+        .tag-c {
+            background: #e0f2f1;
+            color: #00695c;
+        }
+
+        .tag-cpp {
+            background: #e1f5fe;
+            color: #0277bd;
+        }
+
+        .tag-engine {
+            background: #ede7f6;
+            color: #4527a0;
+        }
+
+        .tag-procgen {
+            background: #f1f8e9;
+            color: #558b2f;
+        }
+
+        .tag-platform {
+            background: #fbe9e7;
+            color: #d84315;
+        }
+
+        .tag-tool {
+            background: #eceff1;
+            color: #455a64;
+        }
+
+        [data-theme="dark"] .tag-rendering {
+            background: #5c1c1c;
+            color: #ffbcbc;
+        }
+
+        [data-theme="dark"] .tag-graphics {
+            background: #1a2f4c;
+            color: #90caf9;
+        }
+
+        [data-theme="dark"] .tag-shaders {
+            background: #3d1d4c;
+            color: #d1b3e0;
+        }
+
+        [data-theme="dark"] .tag-article {
+            background: #1f3d1f;
+            color: #a5d6a7;
+        }
+
+        [data-theme="dark"] .tag-interactive {
+            background: #4a2b00;
+            color: #ffcc80;
+        }
+
+        [data-theme="dark"] .tag-math {
+            background: #4a1c3d;
+            color: #f48fb1;
+        }
+
+        [data-theme="dark"] .tag-c {
+            background: #1b3a38;
+            color: #80cbc4;
+        }
+
+        [data-theme="dark"] .tag-cpp {
+            background: #1a3340;
+            color: #81d4fa;
+        }
+
+        [data-theme="dark"] .tag-engine {
+            background: #352f4a;
+            color: #b39ddb;
+        }
+
+        [data-theme="dark"] .tag-procgen {
+            background: #39452b;
+            color: #aed581;
+        }
+
+        [data-theme="dark"] .tag-platform {
+            background: #4a2118;
+            color: #ff8a65;
+        }
+
+        [data-theme="dark"] .tag-tool {
+            background: #2c3033;
+            color: #b0bec5;
+        }
+
+        @media (max-width: 640px) {
+            body {
+                padding: 2rem 1rem;
+            }
+
+            .project-link {
+                flex-direction: column;
+                gap: 0.3rem;
+            }
+
+            .tags {
+                margin-left: 0;
             }
         }
-        .project{
-            cursor: pointer;
-            padding: 1.5rem;
-            border: 1px solid #20283a;
-            border-radius: 0.5rem;
-            position: relative;
-            background-color: rgb(17, 24, 39);
-            transform: translateY(0px);
-            transition-property: transform;
-            transition-duration: 200ms;
-            min-height: 100%;
+
+        a {
+            text-decoration: none !important;
         }
-        .project-title{
-            font-weight: bold;
-            font-size: 1.3rem;
-            padding-bottom: 1rem;
-            color: white;
-            z-index: 1;
-            text-shadow: 1px 1px 2px black;
+
+        a:not(.a-no-icon)[href^="http://"]:after,
+        a:not(.a-no-icon)[href^="https://"]:after {
+            display: none;
         }
-        .project-description{
-            color: white;
-            padding-bottom: 1rem;
-            z-index: 1;
-            text-shadow: 1px 1px 2px black;
-        }
-        .project-tags{
-            display: flex;
-            flex-wrap: wrap;
-            gap: 0.5rem;
-        }
-        .project:hover .project-background{
-            opacity: 0.5;
-            transition-property: opacity;
-            transition-duration: 200ms;
-        }
-        .project:hover .brighter-background{
-            opacity: 0.8;
-            transition-property: opacity;
-            transition-duration: 200ms;
-        }
-        .project:hover{
-            transform: translateY(-3px);
-            transition-property: transform;
-            transition-duration: 200ms;
-        }
-        .project-tag{
-            font-size: 0.875rem;
-            background-color: rgb(17, 24, 39);
-            color: white;
-            border-radius: 9999px;
-            padding-top: 0.25rem;
-            padding-bottom: 0.25rem;
-            padding-left: 0.75rem;
-            padding-right: 0.75rem;
-        }
-        .project-foreground{
-            z-index: 1;
-            position: relative;
-            height: 100%;
-        }
-        .project-background{
+
+        canvas {
             position: absolute;
-            background-size: 100% auto;
             top: 0;
             left: 0;
-            width: 100%;
-            height: 100%;
-            border-radius: 0.5rem;
-            z-index: 0;
-            opacity: 0.2;
-            transition-property: opacity;
-            transition-duration: 200ms;
+            z-index: -1;
         }
-        .brighter-background{
-            opacity: 0.5;
-            transition-property: opacity;
-            transition-duration: 200ms;
-        }
-        a:not(.a-no-icon)[href^="http://"]:after, a:not(.a-no-icon)[href^="https://"]:after{
-            content: "";
-        }
-        .btn-container, .kofi-button{
-            width: 100%;
-        }
-        .kofi-button span.kofitext{
-            line-height: 50px !important;
-        }
-        a{
-            text-decoration: none;
+
+        [data-theme="dark"] canvas{
+            filter: invert(1);
         }
     </style>
 </head>
+
 <body>
-    <nav>
-        <a href="/" style="font-size: 2em;">imad's website</a>
-        <span id="navbar-right" style="float: right;">
-        </span>
-    </nav>
 
-    <p style="font-size: 1.5em;margin-bottom: 2em;margin-top: 2em;">Hi! My name is Imad, I'm a software developer with an interest in graphics programming, game dev and making interactive articles on my website.<br>You can contact me at <a href="mailto:hi@imadr.me">hi@imadr.me</a> or on my <a href="https://twitter.com/imadr_">twitter</a>.</p>
+    <canvas id="main-canvas"></canvas>
 
-<div class="projects">
+    <header>
+        <nav>
+            <h1><a id="title" href="/">Imad Rahmoune</a></h1>
+            <span id="navbar-right">
+            </span>
+        </nav>
 
+        <p class="bio">
+            Hi! My name is Imad, I'm a software developer with an interest in graphics programming, game dev and making
+            interactive articles.
+        </p>
+        <p class="contact">
+            <a href="mailto:hi@imadrahmoune.com">hi@imadrahmoune.com</a> ·
+            <a href="https://x.com/imadr_">twitter</a> ·
+            <a href="https://github.com/imadr">github</a> ·
+            <a href="https://ko-fi.com/imadrahmoune">ko-fi</a>
+        </p>
+    </header>
 
-<a href="pbr/">
-<div class="project">
-    <div class="project-background" style="background-image: url(pbr.png);"></div>
-    <div class="project-foreground">
-        <div class="project-title">Physically based rendering from first principles</div>
-        <div class="project-description">Article explaining the physics and math of PBR</div>
-        <div class="project-tags">
-            <div class="project-tag">Rendering</div>
-            <div class="project-tag">Graphics</div>
+    <div class="projects">
+        <div class="project">
+            <a href="pbr/" class="project-link">
+                <span class="project-title">Physically based rendering from first principles</span>
+                <div class="tags">
+                    <span class="tag tag-article">Article</span>
+                    <span class="tag tag-rendering">Rendering</span>
+                </div>
+            </a>
+        </div>
+
+        <div class="project">
+            <a href="raymarching-explained-interactively/" class="project-link">
+                <span class="project-title">Raymarching explained interactively</span>
+                <div class="tags">
+                    <span class="tag tag-article">Article</span>
+                    <span class="tag tag-rendering">Rendering</span>
+                    <span class="tag tag-shaders">Shaders</span>
+                </div>
+            </a>
+        </div>
+
+        <div class="project">
+            <a href="rotations-with-quaternions/" class="project-link">
+                <span class="project-title">Rotations with quaternions</span>
+                <div class="tags">
+                    <span class="tag tag-article">Article</span>
+                    <span class="tag tag-math">Math</span>
+                </div>
+            </a>
+        </div>
+
+        <div class="project">
+            <a href="liquid-glass/" class="project-link">
+                <span class="project-title">How Apple's Liquid Glass (probably) works</span>
+                <div class="tags">
+                    <span class="tag tag-article">Article</span>
+                    <span class="tag tag-rendering">Rendering</span>
+                    <span class="tag tag-shaders">Shaders</span>
+                </div>
+            </a>
+        </div>
+
+        <div class="project">
+            <a href="https://github.com/imadr/blaz" class="project-link">
+                <span class="project-title">blaz · 3D engine written from scratch</span>
+                <div class="tags">
+                    <span class="tag tag-cpp">C++</span>
+                    <span class="tag tag-engine">Engine</span>
+                    <span class="tag tag-rendering">Rendering</span>
+                </div>
+            </a>
+        </div>
+
+        <div class="project">
+            <a href="terrain-generation/" class="project-link">
+                <span class="project-title">Procedural terrain generation</span>
+                <div class="tags">
+                    <span class="tag tag-procgen">Procgen</span>
+                    <span class="tag tag-rendering">Rendering</span>
+                    <span class="tag tag-shaders">Shaders</span>
+                </div>
+            </a>
+        </div>
+
+        <div class="project">
+            <a href="cross-platform-window-in-c/" class="project-link">
+                <span class="project-title">Cross-platform window in C</span>
+                <div class="tags">
+                    <span class="tag tag-article">Article</span>
+                </div>
+            </a>
+        </div>
+
+        <div class="project">
+            <a href="color-picker/" class="project-link">
+                <span class="project-title">Color picker</span>
+                <div class="tags">
+                    <span class="tag tag-tool">Tool</span>
+                </div>
+            </a>
+        </div>
+
+        <div class="project">
+            <a href="japanese-learning/" class="project-link">
+                <span class="project-title">Japanese learning tool</span>
+                <div class="tags">
+                    <span class="tag tag-tool">Tool</span>
+                </div>
+            </a>
         </div>
     </div>
-</div>
-</a>
 
-
-<a href="liquid-glass/">
-<div class="project">
-    <div class="project-background" style="background-image: url(liquid_glass.png);"></div>
-    <div class="project-foreground">
-        <div class="project-title">How Apple's Liquid Glass (probably) works</div>
-        <div class="project-description">Article explaining how to recreate Apple's Liquid Glass effect</div>
-        <div class="project-tags">
-            <div class="project-tag">Rendering</div>
-            <div class="project-tag">Shader</div>
-        </div>
-    </div>
-</div>
-</a>
-
-<a href="raymarching-explained-interactively/">
-<div class="project">
-    <div class="project-background" style="background-image: url(raymarching_explained_interactively.png);"></div>
-    <div class="project-foreground">
-        <div class="project-title">Raymarching explained interactively</div>
-        <div class="project-description">Interactive tutorial on how to implement a raymarcher in a fragment shader</div>
-        <div class="project-tags">
-            <div class="project-tag">Rendering</div>
-            <div class="project-tag">Tutorial</div>
-            <div class="project-tag">Interactive</div>
-        </div>
-    </div>
-</div>
-</a>
-
-<a href="rotations-with-quaternions/">
-<div class="project">
-    <div class="project-background" style="background-image: url(rotations_with_quaternions.png);"></div>
-    <div class="project-foreground">
-        <div class="project-title">Rotations with quaternions</div>
-        <div class="project-description">Explaining rotations with quaternions, with code example</div>
-        <div class="project-tags">
-            <div class="project-tag">Mathematics</div>
-            <div class="project-tag">Tutorial</div>
-            <div class="project-tag">C</div>
-        </div>
-    </div>
-</div>
-</a>
-
-<a href="https://github.com/imadr/blaz">
-<div class="project">
-    <div class="project-background" style="background-image: url(3d_game_engine.png);"></div>
-    <div class="project-foreground">
-        <div class="project-title">🔥 blaz</div>
-        <div class="project-description">3D engine with no dependencies, written entirely from scratch </div>
-        <div class="project-tags">
-            <div class="project-tag">C++</div>
-            <div class="project-tag">Engine</div>
-            <div class="project-tag">Rendering</div>
-        </div>
-    </div>
-</div>
-</a>
-
-<a href="terrain-generation/">
-<div class="project">
-    <div class="project-background" style="background-image: url(procedural_terrain_generation.png);"></div>
-    <div class="project-foreground">
-        <div class="project-title">Procedural terrain generation</div>
-        <div class="project-description">Terrain generation using perlin noise and other stuff</div>
-        <div class="project-tags">
-            <div class="project-tag">Procgen</div>
-            <div class="project-tag">Rendering</div>
-        </div>
-    </div>
-</div>
-</a>
-
-<a href="cross-platform-window-in-c/">
-<div class="project">
-    <div class="project-background" style="background-image: url(crossplatform_windows_in_c.png);"></div>
-    <div class="project-foreground">
-        <div class="project-title">Cross-platform window in C</div>
-        <div class="project-description"></div>
-        <div class="project-tags">
-            <div class="project-tag">Platform</div>
-            <div class="project-tag">Tutorial</div>
-        </div>
-    </div>
-</div>
-</a>
-
-
-<a href="color-picker/">
-<div class="project">
-    <div class="project-background brighter-background" style="background-image: url(color_picker.png);"></div>
-    <div class="project-foreground">
-        <div class="project-title">Color picker</div>
-        <div class="project-description">Color picker useful for graphics programming</div>
-        <div class="project-tags">
-            <div class="project-tag">Tool</div>
-        </div>
-    </div>
-</div>
-</a>
-
-<a href="habit/">
-<div class="project">
-    <div class="project-background brighter-background" style="background-image: url(habit.png);"></div>
-    <div class="project-foreground">
-        <div class="project-title">Habit Tracker</div>
-        <div class="project-description">Minimalist habit tracker</div>
-        <div class="project-tags">
-            <div class="project-tag">Tool</div>
-        </div>
-    </div>
-</div>
-</a>
-
-
-<a href="japanese-learning/">
-<div class="project">
-    <div class="project-background brighter-background" style="background-image: url(japanese.png);"></div>
-    <div class="project-foreground">
-        <div class="project-title">Japanese learning tool</div>
-        <div class="project-description">Learn hiragana and katakana</div>
-        <div class="project-tags">
-            <div class="project-tag">Tool</div>
-        </div>
-    </div>
-</div>
-</a>
-
-<div class="project" style="padding: 0rem;border: none;background-color: transparent;">
-    <li style="list-style: none;width: 100% ;"><script type='text/javascript' src='https://storage.ko-fi.com/cdn/widget/Widget_2.js'></script><script type='text/javascript'>kofiwidget2.init('Support Me on Ko-fi', '#29abe0', 'Y8Y8ZIOBH');kofiwidget2.draw();</script></li>
-</div>
-
-
-</div>
-
-<div style="display: none;">
-<table>
-
-<tr>
-
-<td>
-    <h2>Articles</h2>
-    <ul>
-        <!-- <li><a href="bullshit-ai-argument/">Bullshit arguments about AI (not) replacing jobs</a></li> -->
-    </ul>
-</td>
-
-<td>
-    <h2>Contact</h2>
-    <ul>
-        <li><a href="mailto:hi@imadr.me">Email</a></li>
-        <li><a href="https://github.com/imadr">Github</a></li>
-        <li><a href="https://www.shadertoy.com/user/imadr">Shadertoy</a></li>
-        <li><a href="https://twitter.com/imadr_">Twitter</a></li>
-    </ul>
-</td>
-
-</tr>
-<tr>
-
-
-<td>
-    <h2>Random stuff</h2>
-    <ul>
-        <li><a href="quiz/">Geography quiz</a></li>
-        <li><a href="color-picker/">Color picker</a></li>
-        <li><a href="japanese-learning/">Japanese learning</a></li>
-        <li><a href="websites/">Cool websites</a></li>
-
-    </ul>
-</td>
-</tr>
-</table>
-</div>
-
-<script src="js/light.js"></script>
+    <script src="js/light.js"></script>
+    <script src="js/math.js"></script>
+    <script src="js/main.js"></script>
 </body>
+
 </html>

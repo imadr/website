@@ -3,6 +3,7 @@
     --color-bg-1: #fff;
     --color-bg-2: #ececec;
     --color-fg-1: black;
+    --color-fg-2: #6f6f6f;
     --color-code-bg: rgb(35, 34, 43);
     --color-href: rgb(25, 110, 240);
 }
@@ -11,6 +12,7 @@
     --color-bg-1: rgb(20, 20, 25);
     --color-bg-2: rgb(41, 41, 49);
     --color-fg-1: white;
+    --color-fg-2: ##a0a0a0;
     --color-code-bg: rgb(35, 34, 43);
     --color-href: rgb(115, 170, 245);
 }

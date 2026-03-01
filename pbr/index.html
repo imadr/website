@@ -5,17 +5,21 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Physically based rendering from first principles</title>
     <link rel="icon" type="image/x-icon" href="/favicon.ico">
+
+    <meta name="description" content="Physically based rendering from first principles">
+    <meta name="author" content="imad">
+
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:site" content="@imadr_">
     <meta name="twitter:title" content="Physically based rendering from first principles">
-    <meta name="twitter:description" content="Physically based rendering from first principles">
-    <meta name="twitter:image" content="https://imadr.me/pbr/img.png">
+    <meta name="twitter:image" content="https://imadrahmoune.com/pbr/img.png">
     <meta name="twitter:image:alt" content="Physically based rendering from first principles">
+
     <meta property="og:title" content="Physically based rendering from first principles">
     <meta property="og:description" content="Physically based rendering from first principles">
-    <meta property="og:image" content="https://imadr.me/pbr/img.png">
-    <meta property="og:type" content="website">
-    <meta property="og:url" content="https://imadr.me/pbr/">
+    <meta property="og:image" content="https://imadrahmoune.com/pbr/img.png">
+    <meta property="og:type" content="article">
+
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="mathdisp.css">
 </head>
@@ -266,9 +270,11 @@ For example, microwaves are used for Wi-Fi and cooking, X-rays are used in medic
 
 <br>
 <p>This is what it looks underwater:</p>
-<img style="width: 100%;" src="snells_window.png">
+<div class="canvas" id="scene_snells_window"></div>
+<div class="slider-container">
+    <label style="font-weight: bold;">Water IOR</label><br><input id="water-ior-input" type="range" min="1.1" max="2.5" step="0.001" data-color="#888">
+</div>
 
-<br>
 
 <h2>The Microfacet Model</h2>
 
@@ -295,7 +301,7 @@ For example, microwaves are used for Wi-Fi and cooking, X-rays are used in medic
     <tr>
         <td>Macrogeometry</td>
         <td>BRDF</td>
-        <td>Statistical average over a pixel, wider cone -> more roughness</td>
+        <td>Statistical average over a pixel, a larger roughness generates a wider cone</td>
     </tr>
 </table>
 <br>
@@ -316,7 +322,7 @@ For example, microwaves are used for Wi-Fi and cooking, X-rays are used in medic
 <h2>Metals</h2>
 
 <p>Metals have a sea of free electrons that absorb light very easily when the photons enter a few nanometers deep inside the surface. The light that isn't absorbed is reflected equally across the visible light spectrum, this is why metals have that distinct "silvery" gray color.</p>
-<p>Notable exceptions are <strong class="gold">gold</strong>, <strong class="copper">copper</strong>, <strong class="osmium">osmium</strong> and <strong class="caesium">caesium</strong>.</p>
+<p>Notable exceptions are <strong class="gold">gold</strong>, <strong class="copper">copper</strong>, <strong class="osmium">osmium</strong> and <strong class="caesium">caesium</strong>. Those metals absorb specific wavelengths which gives them their distinctive colors.</p>
 
 <div class="canvas" id="scene_metals"></div>
 
@@ -328,7 +334,7 @@ For example, microwaves are used for Wi-Fi and cooking, X-rays are used in medic
 
 <h2>Non-metals</h2>
 
-<p>Also called <strong>dielectrics</strong>, these are materials that do not conduct electricity (insulators). They include <strong>plastic, wood, glass, water, diamond, air...</strong></p>
+<p>The second type of non-metallic materials we consider in our microfacet model are called <strong>dielectrics</strong>, these are materials that do not conduct electricity (insulators). They include <strong>plastic, wood, glass, water, diamond, air...</strong></p>
 
 <div class="canvas" id="scene_non_metals"></div>
 
@@ -527,6 +533,134 @@ For example, microwaves are used for Wi-Fi and cooking, X-rays are used in medic
 <p>Other resources include <a href="https://learnopengl.com/PBR/Theory">LearnOpenGL</a>, the <a href="https://www.youtube.com/watch?v=XoVW7CRR5JY">ScienceClic</a> youtube channel, and <a href="https://www.youtube.com/watch?v=aXRTczANuIs">3Blue1Brown</a> of course.</p>
 <p>I can't recommend enough the famous book <a href="https://en.wikipedia.org/wiki/QED:_The_Strange_Theory_of_Light_and_Matter">QED: The Strange Theory of Light and Matter</a> by Richard Feynman.</p>
 
+<div id="comments" data-page="pbr"></div>
+<script type="text/javascript">
+(function() {
+    const commentsDiv = document.getElementById("comments");
+    const postSlug = commentsDiv.getAttribute("data-page");
+
+    commentsDiv.outerHTML = `
+        <h1>Comments</h1>
+        <style type="text/css">
+            #form *{
+                font-family: "inter";
+            }
+            #form{
+                margin-top: 2em;
+                display: flex;
+                flex-direction: column;
+                gap: 9px;
+            }
+            #form input, #form textarea, #form button{
+                font-size: 1em;
+                border: 1px solid #333333;
+                background-color: white;
+                color: #333333;
+                line-height: 1.5;
+                padding: 6px 8px;
+            }
+            #form textarea{
+                height: 6em;
+            }
+            #form button{
+                width: 9em;
+                padding: 3px 6px;
+            }
+            #comments-area{
+                margin-top: 2em;
+            }
+            .comment{
+                border-left: 1px solid #333333;
+                padding-left: 1em;
+                margin-top: 1.5em;
+            }
+            .comment-name{
+                font-weight: bold;
+            }
+            .comment-info{
+                display: flex;
+                gap: 1em;
+                padding-bottom: 0.5em;
+            }
+            .comment-datetime{
+                color: #333333;
+            }
+            .comment.pending {
+                opacity: 0.5;
+            }
+        </style>
+        <div id="comments-area"></div>
+        <form id="form">
+            <input id="name" placeholder="Name" required />
+            <textarea id="comment" placeholder="Comment" required></textarea>
+            <button>Post</button>
+        </form>
+    `;
+
+    const script = document.createElement("script");
+    script.src = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2";
+    script.onload = function() {
+        const clientId = localStorage.getItem("comment_client_id") || crypto.randomUUID();
+        localStorage.setItem("comment_client_id", clientId);
+        const sb = window.supabase.createClient(
+            "https://ncuqrrhckzsxiparjbcc.supabase.co",
+            "sb_publishable_C_ebFmG7_UsFlHoO-cHWQQ_iqrfzntQ",
+            { global: { headers: { "client_id": clientId } } }
+        );
+        const form = document.getElementById("form");
+        const commentsArea = document.getElementById("comments-area");
+        form.onsubmit = async (e) => {
+            e.preventDefault();
+            await sb.from("comments").insert([{
+                post_slug: postSlug,
+                name: form.querySelector("#name").value,
+                comment: form.querySelector("#comment").value,
+                client_id: clientId
+            }]);
+            form.reset();
+            await load();
+        };
+        function escapeHtml(text) {
+            const div = document.createElement("div");
+            div.innerText = text;
+            return div.innerHTML;
+        }
+        async function load() {
+            const { data } = await sb
+            .from("comments")
+            .select("*")
+            .eq("post_slug", postSlug)
+            .order("created_at", { ascending: false });
+            commentsArea.innerHTML = data.map(c => {
+                const date = new Date(c.created_at);
+                const formatted =
+                    date.getFullYear() + "-" +
+                    String(date.getMonth() + 1).padStart(2, "0") + "-" +
+                    String(date.getDate()).padStart(2, "0") + " " +
+                    String(date.getHours()).padStart(2, "0") + ":" +
+                    String(date.getMinutes()).padStart(2, "0") + ":" +
+                    String(date.getSeconds()).padStart(2, "0");
+                const pending = !c.approved;
+                return `
+                    <div class="comment ${pending ? 'pending' : ''}">
+                        <div class="comment-info">
+                            <div class="comment-name">
+                            ${escapeHtml(c.name)}
+                            ${pending ? '<span class="pending-label"> (awaiting approval)</span>' : ''}
+                            </div>
+                            <div class="comment-datetime">${formatted}</div>
+                        </div>
+                        <div class="comment-text">${escapeHtml(c.comment)}</div>
+                    </div>
+                `;
+            }).join("");
+        }
+        load();
+    };
+    document.head.appendChild(script);
+})();
+</script>
+
 <br>
 <br>
 <br>
@@ -534,7 +668,6 @@ For example, microwaves are used for Wi-Fi and cooking, X-rays are used in medic
 <br>
 <br>
 
-<script type="text/javascript" src="tga.js"></script>
 <script type="text/javascript" src="jszip.min.js"></script>
 <script type="text/javascript" src="../js/math.js"></script>
 <script type="text/javascript" src="mathdisp.js"></script>

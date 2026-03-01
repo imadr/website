@@ -9,7 +9,7 @@
     <meta name="twitter:site" content="@imadr_">
     <meta name="twitter:title" content="Raymarching Explained Interactively">
     <meta name="twitter:description" content="Interactive tutorial to learn raymarching">
-    <meta name="twitter:image" content="https://imadr.me/raymarching_explained_interactively.png">
+    <meta name="twitter:image" content="https://imadrahmoune.com/raymarching_explained_interactively.png">
     <meta name="twitter:image:alt" content="Raymarching">
 
     <link rel="stylesheet" href="/css/style.css">
@@ -158,11 +158,10 @@
             display: block;
         }
     </style>
-</head>
 <body>
     <canvas id="main-canvas"></canvas>
     <nav>
-        <a href="/" style="text-transform: uppercase;">Imadr.me</a>
+        <a id="title" href="/">home</a>
         <span id="navbar-right" style="float: right;">
         </span>
     </nav>
@@ -293,7 +292,7 @@
         <div class="editor" id="canvas-webgl-1-editor"></div>
     </div>
 
-  
+
 
     <p>The equation of the SDF for a 3D sphere is basically the same for the 2D circle, in this shader we display the depth (distance) of each point in the scene composed of a sphere:</p>
     <div class="shader-editor">
@@ -323,6 +322,9 @@
     <ul>
         <li><a href="https://www.iquilezles.org/www/index.htm">Inigo Quilez</a> is the best resource on raymarching.</li>
     </ul>
+
+    <div id="comments" data-page="raymarching-explained-interactively"></div>
+    <script src="../js/comments.js"></script>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.33.2/ace.min.js" integrity="sha512-40pej1Lz2wywxd9lNJwJNSp9ekNFyX6wCmOzoaqIuUqexcjAUYqnhbg+fYUuPHzVyr5hshGv5FX8Om7yuTuWnA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.33.2/mode-c_cpp.min.js" integrity="sha512-caUbWe+l7h52Yfiut+hnk+W8LT4v3OlrvqVK7AUE7HKhMcFI86cmrD0cshe98P1UpfpsK30mQDzRhkzYwZHzQA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>

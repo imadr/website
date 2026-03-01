@@ -899,6 +899,23 @@ function create_rect(start_position, size) {
     return { vertices: vertices, indices: indices };
 }
 
+function create_xz_plane(size){
+    let half = size * 0.5;
+    let vertices = [
+        -half, 0, -half, 0, 1, 0,
+         half, 0, -half, 0, 1, 0,
+         half, 0,  half, 0, 1, 0,
+        -half, 0,  half, 0, 1, 0
+    ];
+
+    let indices = [
+        0, 1, 2,
+        0, 2, 3
+    ];
+
+    return { vertices, indices };
+}
+
 function create_circle(center_position, radius, segments){
     let [cx, cy, cz] = center_position;
     let vertices = [
@@ -1122,22 +1139,41 @@ ctx.font_texture = ctx.gl.createTexture();
 ctx.font = {chars:{}, data: {}};
 ctx.text_buffers = {};
 
-ctx.skybox_texture = ctx.gl.createTexture();
+function create_framebuffer(gl, width, height) {
+    const framebuffer = gl.createFramebuffer();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
 
-const postprocess_framebuffer = ctx.gl.createFramebuffer();
-ctx.gl.bindFramebuffer(ctx.gl.FRAMEBUFFER, postprocess_framebuffer);
-const postprocess_texture = ctx.gl.createTexture();
-ctx.gl.bindTexture(ctx.gl.TEXTURE_2D, postprocess_texture);
-ctx.gl.texImage2D(ctx.gl.TEXTURE_2D, 0, ctx.gl.RGBA, ctx.gl.canvas.width, ctx.gl.canvas.height, 0, ctx.gl.RGBA, ctx.gl.UNSIGNED_BYTE, null);
-ctx.gl.texParameteri(ctx.gl.TEXTURE_2D, ctx.gl.TEXTURE_MIN_FILTER, ctx.gl.LINEAR);
-ctx.gl.texParameteri(ctx.gl.TEXTURE_2D, ctx.gl.TEXTURE_MAG_FILTER, ctx.gl.LINEAR);
-ctx.gl.texParameteri(ctx.gl.TEXTURE_2D, ctx.gl.TEXTURE_MIN_FILTER, ctx.gl.LINEAR_MIPMAP_LINEAR);
-ctx.gl.framebufferTexture2D(ctx.gl.FRAMEBUFFER, ctx.gl.COLOR_ATTACHMENT0, ctx.gl.TEXTURE_2D, postprocess_texture, 0);
-const postprocess_renderbuffer = ctx.gl.createRenderbuffer();
-ctx.gl.bindRenderbuffer(ctx.gl.RENDERBUFFER, postprocess_renderbuffer);
-ctx.gl.renderbufferStorage(ctx.gl.RENDERBUFFER, ctx.gl.DEPTH_COMPONENT16, ctx.gl.canvas.width, ctx.gl.canvas.height);
-ctx.gl.framebufferRenderbuffer(ctx.gl.FRAMEBUFFER, ctx.gl.DEPTH_ATTACHMENT, ctx.gl.RENDERBUFFER, postprocess_renderbuffer);
-ctx.gl.bindFramebuffer(ctx.gl.FRAMEBUFFER, null);
+    const texture = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.texImage2D(
+        gl.TEXTURE_2D, 0, gl.RGBA,
+        width, height, 0,
+        gl.RGBA, gl.UNSIGNED_BYTE, null
+    );
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.framebufferTexture2D(
+        gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0,
+        gl.TEXTURE_2D, texture, 0
+    );
+
+    const renderbuffer = gl.createRenderbuffer();
+    gl.bindRenderbuffer(gl.RENDERBUFFER, renderbuffer);
+    gl.renderbufferStorage(
+        gl.RENDERBUFFER, gl.DEPTH_COMPONENT16,
+        width, height
+    );
+    gl.framebufferRenderbuffer(
+        gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT,
+        gl.RENDERBUFFER, renderbuffer
+    );
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    return [framebuffer, texture, renderbuffer];
+}
+
+const [postprocess_framebuffer, postprocess_texture, postprocess_renderbuffer] =
+    create_framebuffer(ctx.gl, ctx.gl.canvas.width, ctx.gl.canvas.height);
 
 function create_text_buffer(ctx, text, start_x = 0, start_y = 0, centered = false) {
     let vertices = [];
@@ -1315,161 +1351,535 @@ in vec3 normal;
 void main(){
     frag_color = vec4(color, 1);
 }`);
-ctx.shaders["shader_raymarching_water"] = ctx.create_shader(`#version 300 es
+ctx.shaders["shader_skybox"] = ctx.create_shader(`#version 300 es
 layout(location = 0) in vec3 position_attrib;
-layout(location = 1) in vec2 texcoord_attrib;
+layout(location = 1) in vec3 normal_attrib;
+layout(location = 2) in vec2 texcoord_attrib;
+layout(location = 3) in vec3 tangent_attrib;
 
 uniform mat4 m;
 uniform mat4 v;
 uniform mat4 p;
 
 out vec3 position;
-out vec2 texcoord;
+
+void main(){
+    vec4 pos = p*mat4(mat3(v))*vec4(position_attrib, 1);
+    gl_Position = pos.xyww;
+    position = position_attrib;
+}`,
+`#version 300 es
+precision highp float;
+
+uniform sampler2D envmap_sky;
+uniform int underwater_mode;
+uniform vec3 camera_pos_world;
+uniform float time;
+uniform float water_density;
+uniform float water_ior;
+
+out vec4 frag_color;
+
+in vec3 position;
+
+const float PI = 3.14159265359;
+
+vec3 sample_lat_long(sampler2D tex, vec3 dir) {
+    float u = atan(dir.z, dir.x) / (2.0 * 3.14159265359) + 0.5;
+    float v = asin(clamp(dir.y, -1.0, 1.0)) / 3.14159265359 + 0.5;
+
+    vec2 uv = vec2(u, v);
+
+    vec2 dx = dFdx(uv);
+    vec2 dy = dFdy(uv);
+
+    if (dx.x > 0.5)  dx.x -= 1.0;
+    if (dx.x < -0.5) dx.x += 1.0;
+    if (dy.x > 0.5)  dy.x -= 1.0;
+    if (dy.x < -0.5) dy.x += 1.0;
+
+    return textureGrad(tex, uv, dx, dy).rgb;
+}
+
+vec3 sample_env(vec3 ray_dir){
+    return sample_lat_long(envmap_sky, normalize(ray_dir)).rgb;
+}
+
+vec3 sample_lat_long_sharp(sampler2D tex, vec3 dir) {
+    float u = atan(dir.z, dir.x) / (2.0 * 3.14159265359) + 0.5;
+    float v = asin(clamp(dir.y, -1.0, 1.0)) / 3.14159265359 + 0.5;
+
+    vec2 uv = vec2(u, v);
+
+    vec2 dx = dFdx(uv);
+    vec2 dy = dFdy(uv);
+
+    if (dx.x > 0.5)  dx.x -= 1.0;
+    if (dx.x < -0.5) dx.x += 1.0;
+    if (dy.x > 0.5)  dy.x -= 1.0;
+    if (dy.x < -0.5) dy.x += 1.0;
+
+    float sharpness = 0.1;
+    return textureGrad(tex, uv, dx * sharpness, dy * sharpness).rgb;
+}
+
+vec3 sample_env_sharp(vec3 ray_dir){
+    return sample_lat_long_sharp(envmap_sky, normalize(ray_dir)).rgb;
+}
+
+vec3 orient_interface_normal(vec3 n, vec3 incident_dir){
+    return dot(incident_dir, n) <= 0.0 ? n : -n;
+}
+
+float fresnel_dielectric(float n1, float n2, float cos_i, float cos_t){
+    float rs_num = n1 * cos_i - n2 * cos_t;
+    float rs_den = n1 * cos_i + n2 * cos_t;
+    float rp_num = n1 * cos_t - n2 * cos_i;
+    float rp_den = n1 * cos_t + n2 * cos_i;
+
+    float rs = 0.0;
+    float rp = 0.0;
+    if(abs(rs_den) > 1e-6){
+        rs = rs_num / rs_den;
+    }
+    if(abs(rp_den) > 1e-6){
+        rp = rp_num / rp_den;
+    }
+    return clamp(0.5 * (rs * rs + rp * rp), 0.0, 1.0);
+}
+
+float hash12(vec2 p){
+    vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+    p3 += dot(p3, p3.yzx + 33.33);
+    return fract((p3.x + p3.y) * p3.z);
+}
+
+float value_noise(vec2 p){
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+
+    float a = hash12(i);
+    float b = hash12(i + vec2(1.0, 0.0));
+    float c = hash12(i + vec2(0.0, 1.0));
+    float d = hash12(i + vec2(1.0, 1.0));
+
+    vec2 u = f * f * (3.0 - 2.0 * f);
+    return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+}
+
+vec2 value_noise_grad(vec2 p){
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+
+    float a = hash12(i);
+    float b = hash12(i + vec2(1.0, 0.0));
+    float c = hash12(i + vec2(0.0, 1.0));
+    float d = hash12(i + vec2(1.0, 1.0));
+
+    vec2 u = f * f * (3.0 - 2.0 * f);
+    vec2 du = 6.0 * f * (1.0 - f);
+    float nx0 = mix(a, b, u.x);
+    float nx1 = mix(c, d, u.x);
+    float dv_dx = mix(b - a, d - c, u.y) * du.x;
+    float dv_dy = (nx1 - nx0) * du.y;
+    return vec2(dv_dx, dv_dy);
+}
+
+float fbm(vec2 p){
+    float v = 0.0;
+    float a = 0.5;
+    mat2 m = mat2(1.6, 1.2, -1.2, 1.6);
+    for(int i = 0; i < 4; i++){
+        v += a * value_noise(p);
+        p = m * p + vec2(19.1, 7.7);
+        a *= 0.5;
+    }
+    return v;
+}
+
+vec2 fbm_grad(vec2 p0){
+    float a = 0.5;
+    vec2 grad = vec2(0.0);
+    vec2 p = p0;
+    mat2 m = mat2(1.6, 1.2, -1.2, 1.6);
+    mat2 jacobian = mat2(1.0);
+    for(int i = 0; i < 4; i++){
+        vec2 ng = value_noise_grad(p);
+        grad += a * (transpose(jacobian) * ng);
+        p = m * p + vec2(19.1, 7.7);
+        jacobian = m * jacobian;
+        a *= 0.5;
+    }
+    return grad;
+}
+
+vec2 wave_height_grad(vec2 xz){
+    vec2 p = xz * 0.22;
+    vec2 flow = vec2(0.05, -0.04) * time;
+
+    float w1 = fbm(p * 0.35 + flow);
+    float w2 = fbm(p * 0.35 - flow * 1.3);
+    p += (vec2(w1, w2) - 0.5) * 1.6;
+
+    vec2 grad_p = fbm_grad(p + flow * 1.8);
+    grad_p += (0.42 * 2.4) * fbm_grad(p * 2.4 - flow * 2.1);
+    return grad_p * 0.22;
+}
+
+vec3 deform_normal(vec3 base_normal, vec3 world_pos){
+    vec2 grad = wave_height_grad(world_pos.xz);
+
+    float wave_strength = 0.42;
+    vec3 n = normalize(vec3(-grad.x * wave_strength, 1.0, -grad.y * wave_strength));
+    if(base_normal.y < 0.0){
+        n = -n;
+    }
+    if(dot(n, base_normal) < 0.0){
+        n = -n;
+    }
+    return n;
+}
+
+vec3 medium_radiance(
+    vec3 dir,
+    vec3 sigma_t,
+    vec3 albedo,
+    vec3 deep_color,
+    vec3 sky_ambient
+){
+    float dir_down = max(-dir.y, 0.02);
+    float depth = 9.0 / dir_down;
+    vec3 trans = exp(-sigma_t * depth);
+    vec3 refracted_bg = sample_env(dir);
+
+    float air_visibility = smoothstep(0.0, 0.12, dir.y);
+    refracted_bg *= air_visibility;
+    vec3 inscatter_light = mix(deep_color, sky_ambient * albedo, 0.75);
+    vec3 inscatter = (vec3(1.0) - trans) * inscatter_light;
+    vec3 medium_col = refracted_bg * trans + inscatter;
+
+    float deep_weight = 1.0 - exp(-depth / 10.0);
+    return mix(medium_col, deep_color, clamp(deep_weight, 0.0, 1.0));
+}
+
+void main(){
+    vec3 ray_dir = normalize(-position);
+    vec3 color = sample_env(ray_dir);
+
+    if(underwater_mode == 1){
+        vec3 water_ray_dir = -ray_dir;
+        float density = max(water_density, 0.0);
+        vec3 sigma_a = vec3(0.22, 0.07, 0.025) * density;
+        vec3 sigma_s = vec3(0.02, 0.045, 0.065) * density;
+        vec3 sigma_t = sigma_a + sigma_s;
+        vec3 albedo = sigma_s / max(sigma_t, vec3(1e-6));
+        vec3 sky_ambient = sample_env(vec3(0.0, 1.0, 0.0));
+        vec3 deep_color = vec3(0.005, 0.03, 0.06);
+        float n1 = max(water_ior, 1e-4);
+
+        if(abs(n1 - 1.0) < 1e-4){
+            if(density < 1e-6){
+                color = sample_env_sharp(water_ray_dir);
+            }
+            else{
+                color = medium_radiance(water_ray_dir, sigma_t, albedo, deep_color, sky_ambient);
+            }
+        }
+        else if(water_ray_dir.y <= 1e-5){
+            color = medium_radiance(water_ray_dir, sigma_t, albedo, deep_color, sky_ambient);
+        }
+        else{
+            float t_surface = max((-camera_pos_world.y) / water_ray_dir.y, 0.0);
+            vec3 att = exp(-sigma_t * t_surface);
+            float up_clarity = smoothstep(0.0, 0.4, water_ray_dir.y);
+            vec3 scatter = (vec3(1.0) - att) * albedo * sky_ambient * (1.0 - up_clarity);
+
+            vec3 hit_point = camera_pos_world + water_ray_dir * t_surface;
+
+            vec3 interface_normal = vec3(0.0, -1.0, 0.0);
+            interface_normal = deform_normal(vec3(0.0, -1.0, 0.0), hit_point);
+            interface_normal = orient_interface_normal(interface_normal, water_ray_dir);
+
+            float n2 = 1.0;
+            float eta = n1 / n2;
+            float cos_i = clamp(-dot(water_ray_dir, interface_normal), 0.0, 1.0);
+            float sin2_t = eta * eta * max(0.0, 1.0 - cos_i * cos_i);
+            bool tir = sin2_t > 1.0;
+
+            float fresnel = 1.0;
+            vec3 refract_air = vec3(0.0);
+            if(!tir){
+                float cos_t = sqrt(max(0.0, 1.0 - sin2_t));
+                fresnel = fresnel_dielectric(n1, n2, cos_i, cos_t);
+                refract_air = normalize(eta * water_ray_dir + (eta * cos_i - cos_t) * interface_normal);
+            }
+
+            vec3 reflected_inside = medium_radiance(reflect(water_ray_dir, interface_normal), sigma_t, albedo, deep_color, sky_ambient);
+            vec3 transmitted_air = tir ? vec3(0.0) : sample_env_sharp(refract_air);
+
+            vec3 interface_radiance = fresnel * reflected_inside + (1.0 - fresnel) * transmitted_air;
+            color = scatter + att * interface_radiance;
+        }
+    }
+
+    color = pow(max(color, vec3(0.0)), vec3(1.0/2.2));
+    frag_color = vec4(color, 1);
+}`);
+ctx.shaders["shader_water"] = ctx.create_shader(`#version 300 es
+layout(location = 0) in vec3 position_attrib;
+layout(location = 1) in vec3 normal_attrib;
+
+uniform mat4 m;
+uniform mat4 v;
+uniform mat4 p;
+
+out vec3 position;
+out vec3 normal;
 out vec3 camera_pos;
 
 void main(){
-    gl_Position = vec4(position_attrib, 1.0);
-    position = position_attrib;
-    texcoord = texcoord_attrib;
+    vec4 world_pos = m*vec4(position_attrib, 1.0);
+    gl_Position = p*v*world_pos;
+    position = world_pos.xyz;
+    mat3 normal_matrix = transpose(inverse(mat3(m)));
+    normal = normalize(normal_matrix*normal_attrib);
     camera_pos = -transpose(mat3(v)) * v[3].xyz;
 }`,
 `#version 300 es
 precision highp float;
 
+uniform sampler2D envmap_sky;
+uniform float time;
+uniform float water_density;
+uniform float water_ior;
+
 out vec4 frag_color;
 
-uniform vec2 resolution;
-uniform vec2 scene_offset;
-
+in vec3 position;
+in vec3 normal;
 in vec3 camera_pos;
 
-const vec3 box_size = vec3(1.0, 1.0, 1.0);
-const float density_per_point = 0.005;
-const float max_distance = 100.0;
-const float small_value = 0.00001;
-const float dist_step_inside = 0.01;
-const int raymarching_steps = 500;
-const float ior_air = 1.0;
-const float ior_water = 1.33;
+const float PI = 3.14159265359;
 
-float box_sdf(vec3 point, vec3 size) {
-    vec3 q = abs(point) - size;
-    return length(max(q, 0.0)) + min(max(q.x, max(q.y, q.z)), 0.0);
+vec3 sample_lat_long(sampler2D tex, vec3 dir) {
+    float u = atan(dir.z, dir.x) / (2.0 * 3.14159265359) + 0.5;
+    float v = asin(clamp(dir.y, -1.0, 1.0)) / 3.14159265359 + 0.5;
+
+    vec2 uv = vec2(u, v);
+
+    vec2 dx = dFdx(uv);
+    vec2 dy = dFdy(uv);
+
+    if (dx.x > 0.5)  dx.x -= 1.0;
+    if (dx.x < -0.5) dx.x += 1.0;
+    if (dy.x > 0.5)  dy.x -= 1.0;
+    if (dy.x < -0.5) dy.x += 1.0;
+
+    return textureGrad(tex, uv, dx, dy).rgb;
 }
 
-mat3 lookat_matrix(vec3 origin, vec3 target, float roll) {
-    vec3 rr = vec3(sin(roll), cos(roll), 0.0);
-    vec3 ww = normalize(target - origin);
-    vec3 uu = normalize(cross(ww, rr));
-    vec3 vv = normalize(cross(uu, ww));
-    return mat3(uu, vv, ww);
+vec3 sample_env(vec3 ray_dir){
+    return sample_lat_long(envmap_sky, normalize(-ray_dir)).rgb;
 }
 
-vec3 estimate_normal(vec3 p) {
-    float eps = 0.001;
-    vec2 h = vec2(eps, 0);
-    return normalize(vec3(
-        box_sdf(p + h.xyy, box_size) - box_sdf(p - h.xyy, box_size),
-        box_sdf(p + h.yxy, box_size) - box_sdf(p - h.yxy, box_size),
-        box_sdf(p + h.yyx, box_size) - box_sdf(p - h.yyx, box_size)
-    ));
+vec3 orient_interface_normal(vec3 n, vec3 incident_dir){
+    return dot(incident_dir, n) <= 0.0 ? n : -n;
 }
 
-vec3 get_sky(vec3 ray_direction){
-    float elevation = clamp(ray_direction.y, 0.0, 1.0);
-    vec3 sky_color = mix(vec3(0.0, 0.4, 0.7), vec3(0.4, 0.7, 1.0), pow(elevation, 0.4));
-    vec3 sun_direction = normalize(vec3(0.0, 0.5, -1.0));
-    float sun_intensity = 1.4;
-    float sun_size = 0.00001;
-    float sun_amount = max(dot(ray_direction, sun_direction), 0.0);
-    float sun_glow = sun_intensity * exp(-pow(1.0 - sun_amount, 2.0) / sun_size);
-    vec3 sun_color = vec3(1.0, 0.9, 0.7);
-    sky_color += sun_color * sun_glow;
-    return sky_color;
-}
+float fresnel_dielectric(float n1, float n2, float cos_i, float cos_t){
+    float rs_num = n1 * cos_i - n2 * cos_t;
+    float rs_den = n1 * cos_i + n2 * cos_t;
+    float rp_num = n1 * cos_t - n2 * cos_i;
+    float rp_den = n1 * cos_t + n2 * cos_i;
 
-bool march(vec3 origin, vec3 direction, out vec3 hit_point, out float dist_total, out float density) {
-    dist_total = 0.0;
-    density = 0.0;
-    bool inside = false;
-
-    for (int i = 0; i < raymarching_steps; i++) {
-        vec3 current_point = origin + direction * dist_total;
-        float dist = box_sdf(current_point, box_size);
-
-        if (dist > small_value && !inside) {
-            dist_total += dist;
-        } else {
-            if (!inside) {
-                hit_point = current_point;
-            }
-            inside = true;
-            density += density_per_point;
-            dist_total += dist_step_inside;
-        }
-
-        if (dist_total > max_distance) break;
-        if (inside && dist > small_value) break;
+    float rs = 0.0;
+    float rp = 0.0;
+    if(abs(rs_den) > 1e-6){
+        rs = rs_num / rs_den;
     }
+    if(abs(rp_den) > 1e-6){
+        rp = rp_num / rp_den;
+    }
+    return clamp(0.5 * (rs * rs + rp * rp), 0.0, 1.0);
+}
 
-    return inside;
+float hash12(vec2 p){
+    vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+    p3 += dot(p3, p3.yzx + 33.33);
+    return fract((p3.x + p3.y) * p3.z);
+}
+
+float value_noise(vec2 p){
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+
+    float a = hash12(i);
+    float b = hash12(i + vec2(1.0, 0.0));
+    float c = hash12(i + vec2(0.0, 1.0));
+    float d = hash12(i + vec2(1.0, 1.0));
+
+    vec2 u = f * f * (3.0 - 2.0 * f);
+    return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+}
+
+vec2 value_noise_grad(vec2 p){
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+
+    float a = hash12(i);
+    float b = hash12(i + vec2(1.0, 0.0));
+    float c = hash12(i + vec2(0.0, 1.0));
+    float d = hash12(i + vec2(1.0, 1.0));
+
+    vec2 u = f * f * (3.0 - 2.0 * f);
+    vec2 du = 6.0 * f * (1.0 - f);
+    float nx0 = mix(a, b, u.x);
+    float nx1 = mix(c, d, u.x);
+    float dv_dx = mix(b - a, d - c, u.y) * du.x;
+    float dv_dy = (nx1 - nx0) * du.y;
+    return vec2(dv_dx, dv_dy);
+}
+
+float fbm(vec2 p){
+    float v = 0.0;
+    float a = 0.5;
+    mat2 m = mat2(1.6, 1.2, -1.2, 1.6);
+    for(int i = 0; i < 4; i++){
+        v += a * value_noise(p);
+        p = m * p + vec2(19.1, 7.7);
+        a *= 0.5;
+    }
+    return v;
+}
+
+vec2 fbm_grad(vec2 p0){
+    float a = 0.5;
+    vec2 grad = vec2(0.0);
+    vec2 p = p0;
+    mat2 m = mat2(1.6, 1.2, -1.2, 1.6);
+    mat2 jacobian = mat2(1.0);
+    for(int i = 0; i < 4; i++){
+        vec2 ng = value_noise_grad(p);
+        grad += a * (transpose(jacobian) * ng);
+        p = m * p + vec2(19.1, 7.7);
+        jacobian = m * jacobian;
+        a *= 0.5;
+    }
+    return grad;
+}
+
+vec2 wave_height_grad(vec2 xz){
+    vec2 p = xz * 0.22;
+    vec2 flow = vec2(0.05, -0.04) * time;
+
+    float w1 = fbm(p * 0.35 + flow);
+    float w2 = fbm(p * 0.35 - flow * 1.3);
+    p += (vec2(w1, w2) - 0.5) * 1.6;
+
+    vec2 grad_p = fbm_grad(p + flow * 1.8);
+    grad_p += (0.42 * 2.4) * fbm_grad(p * 2.4 - flow * 2.1);
+    return grad_p * 0.22;
+}
+
+vec3 deform_normal(vec3 base_normal, vec3 world_pos){
+    vec2 grad = wave_height_grad(world_pos.xz);
+
+    float wave_strength = 0.42;
+    vec3 n = normalize(vec3(-grad.x * wave_strength, 1.0, -grad.y * wave_strength));
+    if(base_normal.y < 0.0){
+        n = -n;
+    }
+    if(dot(n, base_normal) < 0.0){
+        n = -n;
+    }
+    return n;
+}
+
+vec3 medium_radiance(
+    vec3 dir,
+    vec3 sigma_t,
+    vec3 albedo,
+    vec3 deep_color,
+    vec3 sky_ambient
+){
+    float dir_down = max(-dir.y, 0.02);
+    float depth = 9.0 / dir_down;
+    vec3 trans = exp(-sigma_t * depth);
+    vec3 refracted_bg = sample_env(dir);
+    float air_visibility = smoothstep(0.0, 0.12, dir.y);
+    refracted_bg *= air_visibility;
+    vec3 inscatter_light = mix(deep_color, sky_ambient * albedo, 0.75);
+    vec3 inscatter = (vec3(1.0) - trans) * inscatter_light;
+    vec3 medium_col = refracted_bg * trans + inscatter;
+
+    float deep_weight = 1.0 - exp(-depth / 10.0);
+    return mix(medium_col, deep_color, clamp(deep_weight, 0.0, 1.0));
 }
 
 void main(){
-    vec2 frag_coord_scene = gl_FragCoord.xy - scene_offset;
-    vec2 uv = frag_coord_scene / resolution;
+    vec3 incident_dir = normalize(position - camera_pos);
 
-    uv = uv - 0.5;
-    uv.x *= resolution.x / resolution.y;
+    float n_air = 1.0;
+    float n_water = max(water_ior, 1e-4);
+    bool camera_outside = camera_pos.y >= 0.0;
+    float n1 = camera_outside ? n_air : n_water;
+    float n2 = camera_outside ? n_water : n_air;
 
-    mat3 matrix = lookat_matrix(camera_pos, vec3(0, 0, 0), 0.0);
-    vec3 view = matrix * normalize(vec3(uv, 1.0));
+    vec3 interface_normal = camera_outside ? vec3(0.0, 1.0, 0.0) : vec3(0.0, -1.0, 0.0);
+    interface_normal = deform_normal(interface_normal, position);
+    interface_normal = orient_interface_normal(interface_normal, incident_dir);
 
-    vec3 ray_origin = camera_pos;
-    vec3 ray_direction = view;
+    float density = max(water_density, 0.0);
+    vec3 sigma_a = vec3(0.22, 0.07, 0.025) * density;
+    vec3 sigma_s = vec3(0.02, 0.045, 0.065) * density;
+    vec3 sigma_t = sigma_a + sigma_s;
+    vec3 albedo = sigma_s / max(sigma_t, vec3(1e-6));
+    vec3 sky_ambient = sample_env(vec3(0.0, 1.0, 0.0));
+    vec3 deep_color = vec3(0.005, 0.03, 0.06);
 
-    vec3 sky_color = get_sky(ray_direction);
+    bool almost_same_ior = abs(n1 - n2) < 1e-5;
+    if(almost_same_ior){
+        discard;
+    }
 
-    vec3 surface_hit_point;
-    float dist_total;
-    float density;
-    bool hit = march(ray_origin, ray_direction, surface_hit_point, dist_total, density);
+    float eta12 = n1 / n2;
+    float cos_i = clamp(-dot(incident_dir, interface_normal), 0.0, 1.0);
+    float sin2_t = eta12 * eta12 * max(0.0, 1.0 - cos_i * cos_i);
+    bool first_tir = sin2_t > 1.0;
+    vec3 first_refract_dir = vec3(0.0);
+    float fresnel = 1.0;
+    if(!first_tir){
+        float cos_t = sqrt(max(0.0, 1.0 - sin2_t));
+        first_refract_dir = normalize(eta12 * incident_dir + (eta12 * cos_i - cos_t) * interface_normal);
+        fresnel = fresnel_dielectric(n1, n2, cos_i, cos_t);
+    }
+    vec3 reflect_dir = reflect(incident_dir, interface_normal);
+    vec3 result = vec3(0.0);
 
-    if(hit){
-        vec3 normal = estimate_normal(surface_hit_point);
-
-        float eta = ior_air / ior_water;
-        vec3 incident = ray_direction;
-        float cosi = clamp(dot(-normal, incident), -1.0, 1.0);
-        float k = 1.0 - eta * eta * (1.0 - cosi * cosi);
-        bool total_internal_reflection = k < 0.0;
-
-        if(total_internal_reflection){
-            frag_color = vec4(get_sky(reflect(incident, normal)), 1.0);
-            return;
+    if(camera_outside){
+        vec3 reflection = sample_env(reflect_dir);
+        vec3 transmission = vec3(0.0);
+        if(!first_tir){
+            transmission = medium_radiance(first_refract_dir, sigma_t, albedo, deep_color, sky_ambient);
         }
-
-        vec3 refracted_direction = normalize(eta * incident + (eta * cosi - sqrt(k)) * normal);
-        vec3 refracted_origin = surface_hit_point + refracted_direction * small_value;
-
-        vec3 dummy_point;
-        float dummy_dist, density_refracted;
-        march(refracted_origin, refracted_direction, dummy_point, dummy_dist, density_refracted);
-
-        float R0 = pow((ior_air - ior_water) / (ior_air + ior_water), 2.0);
-        float fresnel = R0 + (1.0 - R0) * pow(1.0 - cosi, 5.0);
-
-        vec3 absorption_coeff = vec3(0.7, 0.5, 0.1);
-        vec3 transmitted = sky_color * exp(-density * absorption_coeff);
-
-        vec3 reflected = get_sky(reflect(incident, normal));
-        vec3 final_color = mix(transmitted, reflected, fresnel);
-        frag_color = vec4(final_color, 1.0);
-        // frag_color = vec4(get_sky(refracted_direction), 1.0);
+        result = mix(transmission, reflection, fresnel);
     }
     else{
-        frag_color = vec4(sky_color, 1.0);
+        float t_cam = max(length(position - camera_pos), 0.0);
+        vec3 att_cam = exp(-sigma_t * t_cam);
+        vec3 scatter_cam = (vec3(1.0) - att_cam) * albedo * sky_ambient;
+
+        vec3 reflected_inside = medium_radiance(reflect_dir, sigma_t, albedo, deep_color, sky_ambient);
+        vec3 transmitted_air = vec3(0.0);
+        if(!first_tir){
+            transmitted_air = sample_env(first_refract_dir);
+        }
+
+        vec3 interface_radiance = fresnel * reflected_inside + (1.0 - fresnel) * transmitted_air;
+        result = scatter_cam + att_cam * interface_radiance;
     }
+
+    frag_color = vec4(pow(max(result, vec3(0.0)), vec3(1.0/2.2)), 1.0);
 }`);
 ctx.shaders["shader_basic_alpha"] = ctx.create_shader(`#version 300 es
 layout(location = 0) in vec3 position_attrib;
@@ -2351,9 +2761,10 @@ void main(){
     float normal_distribution = normal_distribution_ggx(normal, halfway_vector, roughness);
     float geometry = geometry_smith(normal, view_vector, light_dir, roughness);
     vec3 F0 = vec3(0.04);
+
     F0 = mix(F0, albedo, metallic);
     vec3 fresnel = fresnel_schlick(dot(view_vector, halfway_vector), F0);
-    
+
     vec3 numerator = normal_distribution * geometry * fresnel;
     float denominator = 4.0 * max(dot(normal, light_dir), 0.0) * max(dot(normal, view_vector), 0.0) + 0.0001;
     vec3 specular = numerator / denominator;
@@ -2362,14 +2773,16 @@ void main(){
 
     vec3 specular_coefficient = fresnel;
     vec3 diffuse_coefficient = vec3(1.0) - specular_coefficient;
-    diffuse_coefficient *= 1.0 - metallic;	  
+    diffuse_coefficient *= 1.0 - metallic;
 
-    vec3 outgoing_radiance = (diffuse_coefficient * albedo / PI  + specular) * cosine_term;
+    float light_intensity = 5.0;
+
+    vec3 outgoing_radiance = (diffuse_coefficient * albedo / PI  + specular) * cosine_term * light_intensity;
 
     vec3 color = outgoing_radiance;
-    
+
     color = color / (color + vec3(1.0));
-    color = pow(color, vec3(1.0/2.2));  
+    color = pow(color, vec3(1.0/2.2));
 
     frag_color = vec4(color, 1);
 }`);
@@ -2466,7 +2879,18 @@ vec3 sample_lat_long(sampler2D tex, vec3 dir, float lod) {
 vec3 sample_lat_long(sampler2D tex, vec3 dir) {
     float u = atan(dir.z, dir.x) / (2.0 * 3.14159265359) + 0.5;
     float v = asin(clamp(dir.y, -1.0, 1.0)) / 3.14159265359 + 0.5;
-    return texture(tex, vec2(u, v)).rgb;
+
+    vec2 uv = vec2(u, v);
+
+    vec2 dx = dFdx(uv);
+    vec2 dy = dFdy(uv);
+
+    if (dx.x > 0.5)  dx.x -= 1.0;
+    if (dx.x < -0.5) dx.x += 1.0;
+    if (dy.x > 0.5)  dy.x -= 1.0;
+    if (dy.x < -0.5) dy.x += 1.0;
+
+    return textureGrad(tex, uv, dx, dy).rgb;
 }
 
 void main(){
@@ -2491,18 +2915,20 @@ void main(){
     tangent = normalize(tangent - dot(tangent, normal) * normal);
     vec3 bitangent = cross(tangent, normal);
     mat3 tbn_matrix = mat3(tangent, bitangent, normal);
-
     vec3 normal_map = texture(normal_texture, texcoord).rgb;
     normal_map = normal_map * 2.0 - vec3(1.0);
     normal_map = normalize(tbn_matrix * normal_map);
 
+    normal_map = world_normal;
     vec3 reflection_vector = reflect(-view_vector, normal_map);
 
     vec3 specular_factor = fresnel_schlick_roughness(max(dot(normal_map, view_vector), 0.0), F0, roughness);
     vec3 diffuse_factor = (vec3(1.0) - specular_factor) * (1.0 - metallic);
 
     const float MAX_REFLECTION_LOD = 8.0;
-    vec3 prefiltered_specular = sample_lat_long(envmap_specular, reflection_vector, roughness * MAX_REFLECTION_LOD).rgb;
+    vec3 flipped_reflection = -vec3(reflection_vector.x, reflection_vector.y, reflection_vector.z);
+    vec3 prefiltered_specular = sample_lat_long(envmap_specular, flipped_reflection, roughness * MAX_REFLECTION_LOD).rgb;
+
     vec2 brdf = texture(brdf_lut, vec2(max(dot(normal_map, view_vector), 0.0), roughness)).rg;
     vec3 specular = prefiltered_specular * (specular_factor * brdf.x + brdf.y);
 
@@ -2814,18 +3240,18 @@ ctx.scenes = {
                 zoom: 3
             }
         }},
-    // "scene_snells_window": {id: "scene_snells_window", el: null, ratio: 1.4, camera: null, dragging_rect: null, draggable_rects: {"scene": []},
-    //     camera: {
-    //         fov: 70, z_near: 0.1, z_far: 1000,
-    //         position: [0, 0, 0], rotation: [0, 0, 0],
-    //         up_vector: [0, 1, 0],
-    //         view_matrix: mat4_identity(),
-    //         orbit: {
-    //             rotation: [0, 0, 0],
-    //             pivot: [0, 0, 0],
-    //             zoom: 7.0
-    //         }
-    //     }},
+    "scene_snells_window": {id: "scene_snells_window", el: null, ratio: 1.4, camera: null, dragging_rect: null, draggable_rects: {"scene": []},
+        camera: {
+            fov: 100, z_near: 0.1, z_far: 1000,
+            position: [0, 0, 0], rotation: [0, 0, 0],
+            up_vector: [0, 1, 0],
+            view_matrix: mat4_identity(),
+            orbit: {
+                rotation: [Math.PI/2, 0, 0],
+                pivot: [0, 0, 0],
+                zoom: 15.0
+            }
+        }, done_shader_texture_setup: false },
     "scene_roughness_micro": {id: "scene_roughness_micro", el: null, ratio: 1.8, camera: null, dragging_rect: null, draggable_rects: {},
         camera: {
             fov: 70, z_near: 0.1, z_far: 1000,
@@ -3252,6 +3678,21 @@ ctx.update_wave_3d = function(drawable, wave_param, lines_segments_3d) {
     }
 }
 
+function resize_framebuffer(gl, framebuffer, texture, renderbuffer, width, height) {
+    gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.texImage2D(
+        gl.TEXTURE_2D, 0, gl.RGBA,
+        width, height, 0,
+        gl.RGBA, gl.UNSIGNED_BYTE, null
+    );
+    gl.bindRenderbuffer(gl.RENDERBUFFER, renderbuffer);
+    gl.renderbufferStorage(
+        gl.RENDERBUFFER, gl.DEPTH_COMPONENT16,
+        width, height
+    );
+}
+
 function resize_event(ctx){
     const pixel_ratio = window.devicePixelRatio || 1;
 
@@ -3266,11 +3707,14 @@ function resize_event(ctx){
 
     ctx.pixel_ratio = pixel_ratio;
 
-    ctx.gl.bindFramebuffer(ctx.gl.FRAMEBUFFER, postprocess_framebuffer);
-    ctx.gl.bindTexture(ctx.gl.TEXTURE_2D, postprocess_texture);
-    ctx.gl.texImage2D(ctx.gl.TEXTURE_2D, 0, ctx.gl.RGBA, ctx.gl.canvas.width, ctx.gl.canvas.height, 0, ctx.gl.RGBA, ctx.gl.UNSIGNED_BYTE, null);
-    ctx.gl.bindRenderbuffer(ctx.gl.RENDERBUFFER, postprocess_renderbuffer);
-    ctx.gl.renderbufferStorage(ctx.gl.RENDERBUFFER, ctx.gl.DEPTH_COMPONENT16, ctx.gl.canvas.width, ctx.gl.canvas.height);
+    resize_framebuffer(
+        ctx.gl,
+        postprocess_framebuffer,
+        postprocess_texture,
+        postprocess_renderbuffer,
+        ctx.gl.canvas.width, ctx.gl.canvas.height
+    );
+
     ctx.gl.bindFramebuffer(ctx.gl.FRAMEBUFFER, null);
 
     let width = document.body.clientWidth - parseInt(window.getComputedStyle(document.body).paddingLeft) - parseInt(window.getComputedStyle(document.body).paddingRight);
@@ -3322,24 +3766,8 @@ const blue = [0.204, 0.443, 0.922];
 const green = [0.143, 0.867, 0.095];
 
 // scene_metals
-const envmap = {
-    "specular": {
-        path: [
-            "ibl/envmap_specular_1024x512.tga",
-            "ibl/envmap_specular_512x256.tga",
-            "ibl/envmap_specular_256x128.tga",
-            "ibl/envmap_specular_128x64.tga",
-            "ibl/envmap_specular_64x32.tga",
-            "ibl/envmap_specular_32x16.tga",
-            "ibl/envmap_specular_16x8.tga",
-            "ibl/envmap_specular_8x4.tga",
-            "ibl/envmap_specular_4x2.tga",
-            "ibl/envmap_specular_2x1.tga",
-            "ibl/envmap_specular_1x1.tga",
-        ],
-        texture: null
-    },
-    "diffuse": {path: "ibl/envmap_diffuse.tga", texture: null}
+let envmaps = {
+    "hotel_room": {"path": "textures/hotel_room_1k.zip"},
 };
 
 const textures = {
@@ -3362,8 +3790,11 @@ const textures = {
     "rusted_metal_metallic": { path: "textures/rusted_metal_metallic.png", texture: null },
     "rusted_metal_roughness": { path: "textures/rusted_metal_roughness.png", texture: null },
     "rusted_metal_normal": { path: "textures/rusted_metal_normal.png", texture: null },
+
+    "brdf_lut": { path: "textures/brdf_lut.png", texture: null },
+
+    "envmap_sky": { path: "textures/cloudy_puresky_1k.hdr", texture: null },
 };
-let brdf_lut = { path: "ibl/brdf_lut.png", texture: null };
 
 let gold_sphere = ctx.create_drawable("shader_pbr", create_uv_sphere_tangent(1, 32, 32, true), [0, 0, 0], translate_3d([-1.2, 0, 0]),
         [{ name: "position_attrib", size: 3 },
@@ -3386,6 +3817,7 @@ let normal_location = null;
 let envmap_specular_location = null;
 let brdf_lut_location = null;
 let envmap_diffuse_location = null;
+let envmap_sky_location = null;
 // scene_metals
 // scene_non_metals
 let plastic_sphere = ctx.create_drawable("shader_pbr", create_uv_sphere_tangent(1, 32, 32, true), [0, 0, 0], translate_3d([0, 0, 0]),
@@ -3426,7 +3858,7 @@ let fresnel_equation_sphere = ctx.create_drawable("shader_fresnel", create_uv_sp
     { name: "tangent_attrib", size: 3 },]
 );
 let base_reflectance = [0.04, 0.04, 0.04];
-document.getElementById("base-reflectance-input").value = base_reflectance;
+document.getElementById("base-reflectance-input").value = base_reflectance[0];
 document.getElementById("base-reflectance-input").addEventListener("input", (e) => {
     base_reflectance = [parseFloat(e.target.value), parseFloat(e.target.value), parseFloat(e.target.value)];
 });
@@ -3499,7 +3931,7 @@ let x_axis_arrow = ctx.create_drawable("shader_basic",
         create_arrow_3d([[grid_start, grid_start, 0], [grid_start + pbr_demo_grid_spacing * 3 + 3, grid_start, 0]], 0.1, 32, 0.5, 0.3),
         [0, 0, 0], mat4_identity());
 let y_axis_arrow = ctx.create_drawable("shader_basic",
-        create_arrow_3d([[grid_start, grid_start, 0], [grid_start, grid_start + pbr_demo_grid_spacing * 3 + 3, 0]], 0.1, 32, 0.5, 0.3), 
+        create_arrow_3d([[grid_start, grid_start, 0], [grid_start, grid_start + pbr_demo_grid_spacing * 3 + 3, 0]], 0.1, 32, 0.5, 0.3),
         [0, 0, 0], mat4_identity());
 ctx.text_buffers["metallic_text"] = {text: "Metallic", color: [0, 0, 0], transform: mat4_identity()};
 ctx.text_buffers["roughness_text"] = {text: "Roughness", color: [0, 0, 0], transform: mat4_identity()};
@@ -3567,11 +3999,11 @@ for(let i = 0; i < n_reflect_rays; i++){
 }
 let x_sign_position = [-0.1, -0.4, 0];
 let red_x_sign_first = ctx.create_drawable("shader_basic", create_line([
-    vec3_add(x_sign_position, [-0.1, -0.1, 0]), 
+    vec3_add(x_sign_position, [-0.1, -0.1, 0]),
     vec3_add(x_sign_position, [0.1, 0.1, 0])
 ], 0.035), red, mat4_identity());
 let red_x_sign_second = ctx.create_drawable("shader_basic", create_line([
-    vec3_add(x_sign_position, [-0.1, 0.1, 0]), 
+    vec3_add(x_sign_position, [-0.1, 0.1, 0]),
     vec3_add(x_sign_position, [0.1, -0.1, 0])
 ], 0.035), red, mat4_identity());
 
@@ -3579,7 +4011,7 @@ function update_roughness_metal_scene(){
     for(let i = 0; i < n_reflect_rays; i++){
         let from = [0, -0.4 + roughness_metal_y_offset, 0];
         let rays_spread = remap_value(roughness_metal, 0, 1, 0.2, Math.PI/4);
-        
+
         let reflect_angle = remap_value(i, 0, n_reflect_rays-1, Math.PI/2+rays_spread, Math.PI-rays_spread);
         let reflect_to = [-Math.sin(reflect_angle), -Math.cos(reflect_angle), 0];
         reflect_to = vec3_scale(vec3_normalize(reflect_to), 0.8);
@@ -3592,11 +4024,11 @@ function update_roughness_metal_scene(){
         let n2 = 1.5;
         let incident_angle = Math.PI/2 - reflect_angle;
         let refract_angle = Math.asin((n1 * Math.sin(incident_angle)) / n2);
-        
+
         refract_angle = refract_angle;
-        
+
         let refract_to = [Math.sin(refract_angle), -Math.cos(refract_angle), 0];
-        refract_to = vec3_scale(vec3_normalize(refract_to), 0.8);
+        refract_to = vec3_scale(vec3_normalize(refract_to), 0.55);
         ctx.update_drawable_mesh(
             refracted_light_arrows_metal[i],
             create_arrow(from, vec3_add(refract_to, [0, -0.4 + roughness_metal_y_offset, 0]), [0.015, 0.03,  0.07])
@@ -3641,33 +4073,33 @@ for(let i = 0; i < n_refract_rays; i++){
 }
 
 let non_metal_particles = [];
-let density = 5.6;
+let density = 5;
 function generate_non_metal_particles() {
     const num_particles = Math.floor(25 * density);
-    const radius = 0.025;
-    
+    const radius = 0.02;
+
     const grid_size = Math.ceil(Math.sqrt(num_particles));
     const cell_width = 2 / grid_size;
     const cell_height = 1 / grid_size;
-    
+
     let particle_count = 0;
     for (let grid_x = 0; grid_x < grid_size && particle_count < num_particles; grid_x++) {
         for (let grid_y = 0; grid_y < grid_size && particle_count < num_particles; grid_y++) {
             const base_x = -1 + grid_x * cell_width + cell_width / 2;
             const base_y = -1.4 + roughness_non_metal_y_offset + grid_y * cell_height + cell_height / 2;
-            
+
             const offset_x = (Math.random() - 0.5) * cell_width * 0.6;
-            const offset_y = (Math.random() - 0.5) * cell_height * 0.6;
-            
+            const offset_y = (Math.random() - 0.5) * cell_height * 0.6 - 0.1;
+
             const x = base_x + offset_x;
             const y = base_y + offset_y;
             const z = 0;
-            
-            if (x >= -1 + radius && x <= 1 - radius && 
+
+            if (x >= -1 + radius && x <= 1 - radius &&
                 y >= -1.4 + roughness_non_metal_y_offset + radius && y <= -0.4 + roughness_non_metal_y_offset - radius) {
-                
+
                 const circle_mesh = create_circle([x, y, z], radius, 16);
-                
+
                 if (particle_count < non_metal_particles.length) {
                     ctx.update_drawable_mesh(non_metal_particles[particle_count], circle_mesh);
                 } else {
@@ -3682,7 +4114,7 @@ function generate_non_metal_particles() {
 
 function update_roughness_non_metal_scene(){
     let middle_reflect_angle = Math.PI/4;
-    
+
     for(let i = 0; i < n_reflect_rays; i++){
         let from = [0, -0.4 + roughness_non_metal_y_offset, 0];
         let rays_spread = remap_value(roughness_non_metal, 0, 1, 0.2, Math.PI/4);
@@ -3699,15 +4131,18 @@ function update_roughness_non_metal_scene(){
         let from = [0, -0.4 + roughness_non_metal_y_offset, 0];
         let n1 = 1.0;
         let n2 = 1.5;
-        
-        let rays_spread = 0.5;
-        let incident_angle = Math.PI/2 - middle_reflect_angle + remap_value(i, 0, n_refract_rays-1, -rays_spread, rays_spread);
+
+        let rays_spread = remap_value(roughness_non_metal, 0, 1, 0.2, Math.PI/4);
+
+        let reflect_angle = remap_value(i, 0, n_refract_rays-1, Math.PI/2+rays_spread, Math.PI-rays_spread);
+        let incident_angle = Math.PI/2 - reflect_angle;
+
         let refract_angle = Math.asin((n1 * Math.sin(incident_angle)) / n2);
-        
-        let refract_to = [-Math.sin(refract_angle), -Math.cos(refract_angle), 0];
+
+        let refract_to = [Math.sin(refract_angle), -Math.cos(refract_angle), 0];
         refract_to = vec3_scale(vec3_normalize(refract_to), 0.4);
-        let ray_end = vec3_add(refract_to, [0, -0.4 + roughness_non_metal_y_offset, 0]);        
-        
+        let ray_end = vec3_add(refract_to, [0, -0.4 + roughness_non_metal_y_offset, 0]);
+
         ctx.update_drawable_mesh(
             refracted_light_arrows_non_metal[i],
             create_arrow(from, ray_end, [0.015, 0.03, 0.07])
@@ -3898,75 +4333,84 @@ for(let i = 0; i < num_geometric_roughness_rays; i++){
 }
 
 let roughness_geometric_function_angle = rad(-120);
-function update_roughness_geometric_function_scene(){
+function update_roughness_geometric_function_scene() {
     // seed++;
     let roughness_geometric_function_line_n = 40;
     let roughness_geometric_function_line_points = [];
     let roughness_geometric_function_line_start_x = -2;
     let roughness_geometric_function_line_end_x = 2;
-    let roughness_geometric_function_line_length = Math.abs(roughness_geometric_function_line_start_x)+Math.abs(roughness_geometric_function_line_end_x);
-    let roughness_geometric_function_line_segment_length = roughness_geometric_function_line_length/roughness_geometric_function_line_n;
-   
-    let first_bump = {
-        position: -0.5,
-        width: 0.4,    
-        height: 0.6  
-    };
-   
-    let second_bump = {
-        position: 0.5,  
-        width: 0.6,      
-        height: 0.5      
-    };
+    let roughness_geometric_function_line_length =
+        Math.abs(roughness_geometric_function_line_start_x) +
+        Math.abs(roughness_geometric_function_line_end_x);
+    let roughness_geometric_function_line_segment_length =
+        roughness_geometric_function_line_length /
+        roughness_geometric_function_line_n;
+
+    let first_bump = {position : -0.5, width : 0.4, height : 0.6};
+
+    let second_bump = {position : 0.5, width : 0.6, height : 0.5};
 
     function get_bump_type(x) {
-        if(x > first_bump.position - first_bump.width/2 &&
-           x < first_bump.position + first_bump.width/2) {
+        if (x > first_bump.position - first_bump.width / 2 &&
+            x < first_bump.position + first_bump.width / 2) {
             return 'first';
-        } else if(x > second_bump.position - second_bump.width/2 &&
-                 x < second_bump.position + second_bump.width/2) {
+        } else if (x > second_bump.position - second_bump.width / 2 &&
+                   x < second_bump.position + second_bump.width / 2) {
             return 'second';
         }
         return null;
     }
 
     let segment_bump_info = [];
-    
-    for(let i = 0; i < roughness_geometric_function_line_n; i++){
-        let start_x = roughness_geometric_function_line_start_x + i*roughness_geometric_function_line_segment_length;
+
+    for (let i = 0; i < roughness_geometric_function_line_n; i++) {
+        let start_x = roughness_geometric_function_line_start_x +
+                      i * roughness_geometric_function_line_segment_length;
         let y = -0.3;
         let bump_type = null;
-       
-        if(start_x > first_bump.position - first_bump.width/2 &&
-           start_x < first_bump.position + first_bump.width/2) {
-            y += first_bump.height * Math.sin((start_x - first_bump.position + first_bump.width/2) * Math.PI * (2.5));
+
+        if (start_x > first_bump.position - first_bump.width / 2 &&
+            start_x < first_bump.position + first_bump.width / 2) {
+            y += first_bump.height *
+                 Math.sin((start_x - first_bump.position + first_bump.width / 2) *
+                          Math.PI * (2.5));
             bump_type = 'first';
-        } else if(start_x > second_bump.position - second_bump.width/2 &&
-                 start_x < second_bump.position + second_bump.width/2) {
-            y += second_bump.height * Math.sin((start_x - second_bump.position + second_bump.width/2) * Math.PI * (2));
+        } else if (start_x > second_bump.position - second_bump.width / 2 &&
+                   start_x < second_bump.position + second_bump.width / 2) {
+            y += second_bump.height *
+                 Math.sin((start_x - second_bump.position + second_bump.width / 2) *
+                          Math.PI * (2));
             bump_type = 'second';
         }
-        
-        roughness_geometric_function_line_points.push([start_x, y, 0]);
+
+        roughness_geometric_function_line_points.push([ start_x, y, 0 ]);
         segment_bump_info.push(bump_type);
     }
-   
-    ctx.update_drawable_mesh(roughness_geometric_function_line, create_line(roughness_geometric_function_line_points, 0.02));
-    ctx.update_drawable_mesh(roughness_geometric_function_body, create_strip_mesh_from_line(roughness_geometric_function_line_points, 1));
-    
+
+    ctx.update_drawable_mesh(
+        roughness_geometric_function_line,
+        create_line(roughness_geometric_function_line_points, 0.02));
+    ctx.update_drawable_mesh(
+        roughness_geometric_function_body,
+        create_strip_mesh_from_line(roughness_geometric_function_line_points, 1));
+
     let first_hit_first_bump = [];
     let first_hit_second_bump = [];
     let second_hit_first_bump = [];
     let second_hit_second_bump = [];
-    
-    for(let i = 0; i < num_geometric_roughness_rays; i++){
-        let from = [-1 + i * num_geometric_roughness_spacing, 0.4];
-        let dir = vec2_normalize([Math.cos(roughness_geometric_function_angle), Math.sin(roughness_geometric_function_angle)]);
+
+    for (let i = 0; i < num_geometric_roughness_rays; i++) {
+        let from = [ -1 + i * num_geometric_roughness_spacing, 0.4 ];
+        let dir = vec2_normalize([
+            Math.cos(roughness_geometric_function_angle),
+            Math.sin(roughness_geometric_function_angle)
+        ]);
         let closest_hit = null;
         let min_dist = Infinity;
         let hit_segment_index = -1;
-        
-        for (let j = 0; j < roughness_geometric_function_line_points.length - 1; j++) {
+
+        for (let j = 0; j < roughness_geometric_function_line_points.length - 1;
+             j++) {
             let p0 = roughness_geometric_function_line_points[j];
             let p1 = roughness_geometric_function_line_points[j + 1];
             let hit = ray_segment_intersect(from, dir, p0, p1);
@@ -3974,33 +4418,34 @@ function update_roughness_geometric_function_scene(){
                 let d = vec2_magnitude(vec2_sub(hit, from));
                 if (d < min_dist) {
                     min_dist = d;
-                    closest_hit = { point: hit, segment: [p0, p1] };
+                    closest_hit = {point : hit, segment : [ p0, p1 ]};
                     hit_segment_index = j;
                 }
             }
         }
-        
-        if(closest_hit){
+
+        if (closest_hit) {
             let initial_bump_hit = segment_bump_info[hit_segment_index];
-            if(initial_bump_hit === 'first') {
+            if (initial_bump_hit === 'first') {
                 first_hit_first_bump.push(i);
-            } else if(initial_bump_hit === 'second') {
+            } else if (initial_bump_hit === 'second') {
                 first_hit_second_bump.push(i);
             }
-            
+
             let to = vec2_add(from, dir);
-           
+
             let [p0, p1] = closest_hit.segment;
             let tangent = vec2_normalize(vec2_sub(p1, p0));
-            let normal = [-tangent[1], tangent[0]];
+            let normal = [ -tangent[1], tangent[0] ];
             let reflected = reflect_ray(dir, normal);
             let reflect_to = vec2_add(closest_hit.point, vec2_scale(reflected, 0.9));
-           
+
             let second_closest_hit = null;
             let second_min_dist = Infinity;
             let second_hit_segment_index = -1;
-            
-            for (let j = 0; j < roughness_geometric_function_line_points.length - 1; j++) {
+
+            for (let j = 0; j < roughness_geometric_function_line_points.length - 1;
+                 j++) {
                 let p0 = roughness_geometric_function_line_points[j];
                 let p1 = roughness_geometric_function_line_points[j + 1];
                 let hit = ray_segment_intersect(closest_hit.point, reflected, p0, p1);
@@ -4008,52 +4453,93 @@ function update_roughness_geometric_function_scene(){
                     let d = vec2_magnitude(vec2_sub(hit, closest_hit.point));
                     if (d > 0.001 && d < second_min_dist) {
                         second_min_dist = d;
-                        second_closest_hit = { point: hit, segment: [p0, p1] };
+                        second_closest_hit = {point : hit, segment : [ p0, p1 ]};
                         second_hit_segment_index = j;
                     }
                 }
             }
-            
-            if(second_closest_hit) {
+
+            if (second_closest_hit) {
                 let second_bump_hit = segment_bump_info[second_hit_segment_index];
-                if(second_bump_hit === 'first') {
+                if (second_bump_hit === 'first') {
                     second_hit_first_bump.push(i);
-                } else if(second_bump_hit === 'second') {
+                } else if (second_bump_hit === 'second') {
                     second_hit_second_bump.push(i);
                 }
             }
-            
+
             incoming_light_arrows_geometric_function[i].color = golden;
             reflected_light_arrows_geometric_function[i].color = golden;
 
-            if(first_hit_second_bump.includes(i)){
-                incoming_light_arrows_geometric_function[i].color = [0.922, 0.204, 0.204];
+            if (first_hit_second_bump.includes(i)) {
+                incoming_light_arrows_geometric_function[i].color =
+                    [ 0.922, 0.204, 0.204 ];
                 ctx.update_drawable_mesh(incoming_light_arrows_geometric_function[i],
-                    create_arrow([...from, 0], [...closest_hit.point, 0], [0.012, 0.02, 0.06]));
+                                         create_arrow([...from, 0 ],
+                                                      [...closest_hit.point, 0 ],
+                                                      [ 0.012, 0.02, 0.06 ]));
                 ctx.update_drawable_mesh(reflected_light_arrows_geometric_function[i],
-                    create_arrow([1000, 1000, 0], [1000, 1000, 0], [0.012, 0.02, 0.06]));
+                                         create_arrow([ 1000, 1000, 0 ],
+                                                      [ 1000, 1000, 0 ],
+                                                      [ 0.012, 0.02, 0.06 ]));
+            } else if (second_hit_first_bump.includes(i)) {
+                let reflect_to =
+                    second_closest_hit
+                        ? second_closest_hit.point
+                        : vec2_add(closest_hit.point, vec2_scale(reflected, 0.9));
+                incoming_light_arrows_geometric_function[i].color =
+                    [ 0.204, 0.443, 0.922 ];
+                reflected_light_arrows_geometric_function[i].color =
+                    [ 0.204, 0.443, 0.922 ];
+                ctx.update_drawable_mesh(incoming_light_arrows_geometric_function[i],
+                                         create_arrow([...from, 0 ],
+                                                      [...closest_hit.point, 0 ],
+                                                      [ 0.012, 0.02, 0.06 ]));
+                ctx.update_drawable_mesh(reflected_light_arrows_geometric_function[i],
+                                         create_arrow([...closest_hit.point, 0 ],
+                                                      [...reflect_to, 0 ],
+                                                      [ 0.012, 0.02, 0.06 ]));
             }
-            else if(second_hit_first_bump.includes(i)){
-                let reflect_to = second_closest_hit ? second_closest_hit.point : vec2_add(closest_hit.point, vec2_scale(reflected, 0.9));
+            else if (first_hit_first_bump.includes(i)) {
+                incoming_light_arrows_geometric_function[i].color =
+                    [ 0.922, 0.204, 0.204 ];
+                ctx.update_drawable_mesh(incoming_light_arrows_geometric_function[i],
+                                         create_arrow([...from, 0 ],
+                                                      [...closest_hit.point, 0 ],
+                                                      [ 0.012, 0.02, 0.06 ]));
+                ctx.update_drawable_mesh(reflected_light_arrows_geometric_function[i],
+                                         create_arrow([ 1000, 1000, 0 ],
+                                                      [ 1000, 1000, 0 ],
+                                                      [ 0.012, 0.02, 0.06 ]));
+            }
+            else if (second_hit_second_bump.includes(i)) {
+                let reflect_to =
+                    second_closest_hit
+                        ? second_closest_hit.point
+                        : vec2_add(closest_hit.point, vec2_scale(reflected, 0.9));
+
                 incoming_light_arrows_geometric_function[i].color = [0.204, 0.443, 0.922];
                 reflected_light_arrows_geometric_function[i].color = [0.204, 0.443, 0.922];
-                ctx.update_drawable_mesh(incoming_light_arrows_geometric_function[i],
-                    create_arrow([...from, 0], [...closest_hit.point, 0], [0.012, 0.02, 0.06]));
-                ctx.update_drawable_mesh(reflected_light_arrows_geometric_function[i],
-                    create_arrow([...closest_hit.point, 0], [...reflect_to, 0], [0.012, 0.02, 0.06]));
-                }
-            else if(first_hit_first_bump.includes(i)){
-                incoming_light_arrows_geometric_function[i].color = [0.922, 0.204, 0.204];
-                ctx.update_drawable_mesh(incoming_light_arrows_geometric_function[i],
-                    create_arrow([...from, 0], [...closest_hit.point, 0], [0.012, 0.02, 0.06]));
-                ctx.update_drawable_mesh(reflected_light_arrows_geometric_function[i],
-                    create_arrow([1000, 1000, 0], [1000, 1000, 0], [0.012, 0.02, 0.06]));
+
+                ctx.update_drawable_mesh(
+                    incoming_light_arrows_geometric_function[i],
+                    create_arrow([...from, 0], [...closest_hit.point, 0], [0.012, 0.02, 0.06])
+                );
+
+                ctx.update_drawable_mesh(
+                    reflected_light_arrows_geometric_function[i],
+                    create_arrow([...closest_hit.point, 0], [...reflect_to, 0], [0.012, 0.02, 0.06])
+                );
             }
-            else{
+            else {
                 ctx.update_drawable_mesh(incoming_light_arrows_geometric_function[i],
-                    create_arrow([...from, 0], [...closest_hit.point, 0], [0.012, 0.02, 0.06]));
+                                         create_arrow([...from, 0 ],
+                                                      [...closest_hit.point, 0 ],
+                                                      [ 0.012, 0.02, 0.06 ]));
                 ctx.update_drawable_mesh(reflected_light_arrows_geometric_function[i],
-                    create_arrow([...closest_hit.point, 0], [...reflect_to, 0], [0.012, 0.02, 0.06]));
+                                         create_arrow([...closest_hit.point, 0 ],
+                                                      [...reflect_to, 0 ],
+                                                      [ 0.012, 0.02, 0.06 ]));
             }
         }
     }
@@ -4116,9 +4602,9 @@ function update_cosine_law_scene(){
         let to = [to_x, to_y, 0];
         let perp_vector = [Math.cos(angle), Math.sin(angle), 0];
         let beam_center_start = [cosine_law_center[0] - cosine_law_beam_distance * Math.sin(angle), cosine_law_center[1] + cosine_law_beam_distance * Math.cos(angle), 0];
-        
+
         let from = vec3_add(beam_center_start, vec3_scale(perp_vector, perpendicular_spread));
- 
+
         ctx.update_drawable_mesh(
             cosine_law_incoming_light_arrows[i],
             create_arrow(from, to, [0.012, 0.02, 0.05])
@@ -4128,14 +4614,14 @@ function update_cosine_law_scene(){
     let hit_extent = max_spread / Math.cos(angle);
     let hit_start = [cosine_law_center[0] - hit_extent, cosine_law_center[1], 0];
     let hit_end = [cosine_law_center[0] + hit_extent, cosine_law_center[1], 0];
-    ctx.update_drawable_mesh(cosine_law_hit_line, 
+    ctx.update_drawable_mesh(cosine_law_hit_line,
         create_line([hit_start, hit_end], 0.03)
     );
 
     let beam_center_start = [cosine_law_center[0] - cosine_law_beam_distance * Math.sin(angle), cosine_law_center[1] + cosine_law_beam_distance * Math.cos(angle), 0];
     let beam_direction_start = beam_center_start;
     let beam_direction_end = cosine_law_center;
-   
+
     ctx.update_drawable_mesh(cosine_law_center_line,
         create_line_dashed([beam_direction_start, beam_direction_end], 0.01, 0.03, 0.015)
     );
@@ -4835,21 +5321,29 @@ document.getElementById("tir-angle-input").addEventListener("input", function(e)
 // scene_total_internal_reflection
 
 // scene_snells_window
-// let raymarching_fullscreen_quad = ctx.create_drawable("shader_raymarching_water", {
-//     vertices: [
-//         -1, -1, 0, 0, 0,
-//          1, -1, 0, 1, 0,
-//          1,  1, 0, 1, 1,
-//         -1,  1, 0, 0, 1
-//     ],
-//     indices: [
-//         0, 1, 2,
-//         0, 2, 3
-//     ]
-// }, [1, 0, 1], mat4_identity(), [
-//     { name: "position_attrib", size: 3 },
-//     { name: "texcoord_attrib", size: 2 }
-// ]);
+const water_plane_size = 2000;
+let water_density = 0.0;
+let water_ior = 1.33;
+let water_surface = ctx.create_drawable(
+            "shader_water",
+            create_xz_plane(water_plane_size),
+            [1, 0, 1],
+            translate_3d([0, 0, 0])
+        );
+let skybox = ctx.create_drawable(
+        "shader_skybox",
+        create_uv_sphere_tangent(1, 32, 32, true), [0, 0, 0], translate_3d([0, 0, 0]),
+        [
+            { name: "position_attrib", size: 3 },
+            { name: "normal_attrib", size: 3 },
+            { name: "texcoord_attrib", size: 2 },
+            { name: "tangent_attrib", size: 3 },
+        ]
+    );
+document.getElementById("water-ior-input").value = water_ior;
+document.getElementById("water-ior-input").addEventListener("input", function(e){
+    water_ior = parseFloat(e.target.value);
+});
 // scene_snells_window
 
 // scene_electric_field setup
@@ -5122,17 +5616,13 @@ document.getElementById("frequency-input-spectrum").addEventListener("input", (e
 let spectrum_wave = {vertex_buffer: null, shader: "shader_basic"};
 spectrum_wave.transform = translate_3d([-7.5, 0.9, -10]);
 ctx.update_wave_3d(spectrum_wave, wave_param_spectrum, lines_segments_3d);
+
+let spectrum_background = ctx.create_drawable("shader_basic",
+    create_rect([0, 0, 0], [3.8, 0.4]),
+    [0.85, 0.85, 0.85], translate_3d([-2, -0.5, -1]));
 let spectrum = ctx.create_drawable("shader_spectrum",
     create_rect([0, 0, 0], [0.8, 0.4]),
     [0, 0, 0], translate_3d([-0.4, -0.5, -1]));
-let arrow_spectrum_1 = ctx.create_drawable("shader_basic",
-   create_arrow([0, 0, 0], [1.2, 0, 0], [0.015, 0.04, 0.04]), [0, 0, 0], translate_3d([0, -0.07, 0]));
-let arrow_spectrum_2 = ctx.create_drawable("shader_basic",
-   create_arrow([0, 0, 0], [-1.2, 0, 0], [0.015, 0.04, 0.04]), [0, 0, 0], translate_3d([0, -0.07, 0]));
-let arrow_spectrum_3 = ctx.create_drawable("shader_basic",
-   create_arrow([0, 0, 0], [1.2, 0, 0], [0.015, 0.04, 0.04]), [0, 0, 0], translate_3d([0, -0.37, 0]));
-let arrow_spectrum_4 = ctx.create_drawable("shader_basic",
-   create_arrow([0, 0, 0], [-1.2, 0, 0], [0.015, 0.04, 0.04]), [0, 0, 0], translate_3d([0, -0.37, 0]));
 let arrow = ctx.create_drawable("shader_basic",
     create_triangle([0, 0, 0], [0.15, 0.15]),
     [0, 0, 0], translate_3d([-0.075, -0.64, -0.9]));
@@ -5522,61 +6012,6 @@ for(let i = 0; i < num_electrons_ampere; i++){
     coil_electrons_ampere.push([coil_electron, t]);
 }
 // scene_ampere setup
-
-// scene_transport
-let apple_transform_transport = mat4_mat4_mul(
-    translate_3d([0, -1, 0]),
-    scale_3d([0.5, 0.5, 0.5])
-);
-let sun = ctx.create_drawable("shader_basic", create_uv_sphere(0.5, 32, 32, true), [1, 1, 0], translate_3d([-2.8, 1, 0]),
-[
-    { name: "position_attrib", size: 3 },
-    { name: "normal_attrib", size: 3 },
-    { name: "texcoord_attrib", size: 2 },
-]);
-// let eye = ctx.create_drawable("shader_eye", create_uv_sphere(0.4, 32, 32, true), [1, 1, 0], mat4_mat4_mul(
-//     mat4_mat4_mul(
-//         rotate_3d(axis_angle_to_quat(vec3_normalize([0, 1, 0]), rad(20))),
-//         rotate_3d(axis_angle_to_quat(vec3_normalize([0, 0, 1]), rad(20))),
-//     ),
-//     translate_3d([2, 1, 0]),
-// ),
-// [
-//     { name: "position_attrib", size: 3 },
-//     { name: "normal_attrib", size: 3 },
-//     { name: "texcoord_attrib", size: 2 },
-// ]);
-
-let wave_param_sun_to_apple = {
-    num_points: 500,
-    width: 3,
-    amplitude: 0.1,
-    frequency: 6,
-    thickness: 0.02,
-    z_range: 0,
-    time: 0,
-};
-let wave_sun_to_apple = {vertex_buffer: null, shader: "shader_basic"};
-wave_sun_to_apple.transform = mat4_mat4_mul(
-    rotate_3d(axis_angle_to_quat(vec3_normalize([0, 0, 1]), rad(-30))),
-    translate_3d([-3, 1, 0]),
-);
-
-let wave_param_apple_to_eye = {
-    num_points: 500,
-    width: 2,
-    amplitude: 0.1,
-    frequency: 6,
-    thickness: 0.02,
-    z_range: 0,
-    time: 0,
-};
-let wave_apple_to_eye = {vertex_buffer: null, shader: "shader_basic"};
-wave_apple_to_eye.transform = mat4_mat4_mul(
-    rotate_3d(axis_angle_to_quat(vec3_normalize([0, 0, 1]), rad(40))),
-    translate_3d([0.3, -0.4, 0]),
-);
-// scene_transport
 // scene_apple_lights
 let flashlight_transform = mat4_mat4_mul(
     scale_3d([0.4, 0.4, 0.4]),
@@ -6155,31 +6590,31 @@ for(let i = 0; i < brdf_arrow_num; i++){
     let cone_center = vec3_normalize(outgoing_light_arrow_end);
     let cone_angle = Math.PI / 4;
     let z_axis = cone_center;
-    
+
     let temp = [1, 0, 0];
     if (Math.abs(vec3_dot(z_axis, temp)) > 0.9) {
         temp = [0, 1, 0];
     }
     let x_axis = vec3_normalize(vec3_cross(z_axis, temp));
     let y_axis = vec3_normalize(vec3_cross(z_axis, x_axis));
-    
+
     let golden_ratio = (1 + Math.sqrt(5)) / 2;
     let phi = 2 * Math.PI * i / golden_ratio;
     let cos_theta = 1 - (1 - Math.cos(cone_angle)) * i / (brdf_arrow_num - 1);
     let theta = Math.acos(cos_theta);
-    
+
     let cone_direction = [
         Math.sin(theta) * Math.cos(phi),
         Math.sin(theta) * Math.sin(phi),
         Math.cos(theta)
     ];
-    
+
     let direction = [
         cone_direction[0] * x_axis[0] + cone_direction[1] * y_axis[0] + cone_direction[2] * z_axis[0],
         cone_direction[0] * x_axis[1] + cone_direction[1] * y_axis[1] + cone_direction[2] * z_axis[1],
         cone_direction[0] * x_axis[2] + cone_direction[1] * y_axis[2] + cone_direction[2] * z_axis[2]
     ];
-    
+
     let arrow_end = vec3_scale(direction, 0.14);
     let brdf_arrow_thickness = [0.003, 0.02, 0.01];
 
@@ -6737,7 +7172,7 @@ function update(current_time){
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, ctx.font_texture);
 
-    const pixel_ratio = ctx.pixelRatio || window.devicePixelRatio || 1;
+    const pixel_ratio = ctx.pixel_ratio || window.devicePixelRatio || 1;
 
     for(let scene_id in ctx.scenes){
         const scene = ctx.scenes[scene_id];
@@ -6807,13 +7242,13 @@ function update(current_time){
             }
 
             gl.activeTexture(gl.TEXTURE4);
-            gl.bindTexture(gl.TEXTURE_2D, envmap["specular"].texture);
+            gl.bindTexture(gl.TEXTURE_2D, envmaps["hotel_room"].specular_texture);
 
             gl.activeTexture(gl.TEXTURE5);
-            gl.bindTexture(gl.TEXTURE_2D, brdf_lut.texture);
+            gl.bindTexture(gl.TEXTURE_2D, textures["brdf_lut"].texture);
 
             gl.activeTexture(gl.TEXTURE6);
-            gl.bindTexture(gl.TEXTURE_2D, envmap["diffuse"].texture);
+            gl.bindTexture(gl.TEXTURE_2D, envmaps["hotel_room"].diffuse_texture);
 
             gl.activeTexture(gl.TEXTURE0);
             gl.bindTexture(gl.TEXTURE_2D, textures["gold_albedo"].texture);
@@ -6855,15 +7290,15 @@ function update(current_time){
                 gl.uniform1i(envmap_diffuse_location, 6);
                 scene.done_shader_texture_setup = true;
             }
-            
+
             gl.activeTexture(gl.TEXTURE4);
-            gl.bindTexture(gl.TEXTURE_2D, envmap["specular"].texture);
+            gl.bindTexture(gl.TEXTURE_2D, envmaps["hotel_room"].specular_texture);
 
             gl.activeTexture(gl.TEXTURE5);
-            gl.bindTexture(gl.TEXTURE_2D, brdf_lut.texture);
+            gl.bindTexture(gl.TEXTURE_2D, textures["brdf_lut"].texture);
 
             gl.activeTexture(gl.TEXTURE6);
-            gl.bindTexture(gl.TEXTURE_2D, envmap["diffuse"].texture);
+            gl.bindTexture(gl.TEXTURE_2D, envmaps["hotel_room"].diffuse_texture);
 
             gl.activeTexture(gl.TEXTURE0);
             gl.bindTexture(gl.TEXTURE_2D, textures["plastic_albedo"].texture);
@@ -6897,13 +7332,13 @@ function update(current_time){
             }
 
             gl.activeTexture(gl.TEXTURE4);
-            gl.bindTexture(gl.TEXTURE_2D, envmap["specular"].texture);
+            gl.bindTexture(gl.TEXTURE_2D, envmaps["hotel_room"].specular_texture);
 
             gl.activeTexture(gl.TEXTURE5);
-            gl.bindTexture(gl.TEXTURE_2D, brdf_lut.texture);
+            gl.bindTexture(gl.TEXTURE_2D, textures["brdf_lut"].texture);
 
             gl.activeTexture(gl.TEXTURE6);
-            gl.bindTexture(gl.TEXTURE_2D, envmap["diffuse"].texture);
+            gl.bindTexture(gl.TEXTURE_2D, envmaps["hotel_room"].diffuse_texture);
 
             gl.activeTexture(gl.TEXTURE0);
             gl.bindTexture(gl.TEXTURE_2D, textures["rusted_metal_albedo"].texture);
@@ -6933,16 +7368,16 @@ function update(current_time){
             }
             ctx.draw(x_axis_arrow);
             ctx.draw(y_axis_arrow);
-            
+
             gl.activeTexture(gl.TEXTURE0);
             gl.bindTexture(gl.TEXTURE_2D, ctx.font_texture);
             let metallic_text_position = weird_thing(scene, ui_camera_reflection_3d, [-2, -7, 0]);
             ctx.text_buffers["metallic_text"].transform = mat4_mat4_mul(scale_3d([0.0045, 0.0045, 0.0045]), mat4_mat4_mul(scale_3d([1, 1, 1]), translate_3d(metallic_text_position)));
             ctx.draw(ctx.text_buffers["metallic_text"], {}, ui_camera_reflection_3d);
-            
+
             let roughness_text_position = weird_thing(scene, ui_camera_reflection_3d, [-3.3, 6.5, 0]);
             ctx.text_buffers["roughness_text"].transform = mat4_mat4_mul(scale_3d([0.0045, 0.0045, 0.0045]), mat4_mat4_mul(scale_3d([1, 1, 1]),
-                mat4_mat4_mul(    
+                mat4_mat4_mul(
                     translate_3d(roughness_text_position),
                     rotate_3d(axis_angle_to_quat([0, 0, 1], rad(90)))
                 )
@@ -6982,12 +7417,12 @@ function update(current_time){
                 ctx.draw(refracted_light_arrows_non_metal[i]);
                 ctx.draw(scattered_rays_non_metal[i]);
             }
-            
+
 
 
             ctx.draw(roughness_non_metal_line);
             ctx.draw(roughness_non_metal_body);
-            
+
             ctx.draw(incoming_light_arrow_non_metal);
         }
         else if(scene_id == "scene_roughness_micro"){
@@ -7017,7 +7452,7 @@ function update(current_time){
             ctx.draw(cosine_law_hit_line);
             for(let i = 0; i < cosine_law_num_arrows; i++){
                 ctx.draw(cosine_law_incoming_light_arrows[i]);
-            }            
+            }
             ctx.draw(cosine_law_line);
             ctx.draw(cosine_law_body);
 
@@ -7129,22 +7564,77 @@ function update(current_time){
             ctx.draw(ctx.text_buffers["reflection_angle_2_sub"]);
             gl.depthFunc(gl.LESS);
         }
-        // else if(scene_id === "scene_snells_window") {
-        //     let shader = ctx.shaders[raymarching_fullscreen_quad.shader];
-        //     gl.useProgram(shader.program);
-        //     gl.activeTexture(gl.TEXTURE0);
-        //     gl.bindTexture(gl.TEXTURE_2D, ctx.skybox_texture);
-        //     update_camera_projection_matrix(scene.camera, scene.width/scene.height);
-        //     update_camera_orbit(scene.camera);
-        //     ctx.set_shader_uniform(shader, "p", scene.camera.projection_matrix);
-        //     ctx.set_shader_uniform(shader, "v", scene.camera.view_matrix);
-        //     ctx.set_shader_uniform(shader, "m", raymarching_fullscreen_quad.transform);
-        //     ctx.set_shader_uniform(shader, "time", ctx.time);
-        //     ctx.set_shader_uniform(shader, "scene_offset", [left, bottom]);
-        //     ctx.set_shader_uniform(shader, "resolution", [width, height]);
-        //     gl.bindVertexArray(raymarching_fullscreen_quad.vertex_buffer.vao);
-        //     gl.drawElements(gl.TRIANGLES, raymarching_fullscreen_quad.vertex_buffer.draw_count, gl.UNSIGNED_SHORT, 0);
-        // }
+        else if(scene_id === "scene_snells_window") {
+            update_camera_orbit(scene.camera);
+            let camera_underwater = scene.camera.position[1] < 0.0;
+
+            if(!scene.done_shader_texture_setup){
+                let shader = ctx.shaders["shader_water"];
+                gl.useProgram(shader.program);
+                envmap_sky_location = gl.getUniformLocation(shader.program, "envmap_sky");
+                gl.uniform1i(envmap_sky_location, 0);
+                let water_density_location = gl.getUniformLocation(shader.program, "water_density");
+                gl.uniform1f(water_density_location, water_density);
+                let water_ior_location = gl.getUniformLocation(shader.program, "water_ior");
+                gl.uniform1f(water_ior_location, water_ior);
+
+                shader = ctx.shaders["shader_skybox"];
+                gl.useProgram(shader.program);
+                envmap_sky_location = gl.getUniformLocation(shader.program, "envmap_sky");
+                gl.uniform1i(envmap_sky_location, 0);
+                water_density_location = gl.getUniformLocation(shader.program, "water_density");
+                gl.uniform1f(water_density_location, water_density);
+                water_ior_location = gl.getUniformLocation(shader.program, "water_ior");
+                gl.uniform1f(water_ior_location, water_ior);
+
+                scene.done_shader_texture_setup = true;
+            }
+
+            ctx.gl.bindFramebuffer(ctx.gl.FRAMEBUFFER, null);
+            gl.cullFace(gl.BACK);
+            gl.depthFunc(gl.LEQUAL);
+            gl.useProgram(ctx.shaders["shader_skybox"].program);
+            gl.activeTexture(gl.TEXTURE0);
+            gl.bindTexture(gl.TEXTURE_2D, textures["envmap_sky"].texture);
+            let skybox_shader = ctx.shaders["shader_skybox"];
+            if(skybox_shader.uniforms.hasOwnProperty("underwater_mode")){
+                gl.uniform1i(skybox_shader.uniforms["underwater_mode"].location, camera_underwater ? 1 : 0);
+            }
+            if(skybox_shader.uniforms.hasOwnProperty("camera_pos_world")){
+                gl.uniform3fv(skybox_shader.uniforms["camera_pos_world"].location, scene.camera.position);
+            }
+            if(skybox_shader.uniforms.hasOwnProperty("water_density")){
+                gl.uniform1f(skybox_shader.uniforms["water_density"].location, water_density);
+            }
+            if(skybox_shader.uniforms.hasOwnProperty("water_ior")){
+                gl.uniform1f(skybox_shader.uniforms["water_ior"].location, water_ior);
+            }
+            gl.cullFace(gl.FRONT);
+            ctx.draw(skybox);
+
+            gl.depthFunc(gl.LESS);
+            gl.cullFace(gl.BACK);
+            if(!camera_underwater){
+                gl.useProgram(ctx.shaders["shader_water"].program);
+                let water_shader = ctx.shaders["shader_water"];
+                if(water_shader.uniforms.hasOwnProperty("water_density")){
+                    gl.uniform1f(water_shader.uniforms["water_density"].location, water_density);
+                }
+                if(water_shader.uniforms.hasOwnProperty("water_ior")){
+                    gl.uniform1f(water_shader.uniforms["water_ior"].location, water_ior);
+                }
+
+                gl.activeTexture(gl.TEXTURE0);
+                gl.bindTexture(gl.TEXTURE_2D, textures["envmap_sky"].texture);
+
+                gl.disable(gl.BLEND);
+                gl.disable(gl.CULL_FACE);
+                ctx.draw(water_surface);
+                gl.enable(gl.CULL_FACE);
+                gl.enable(gl.BLEND);
+                gl.cullFace(gl.BACK);
+            }
+        }
         else if(scene_id === "scene_total_internal_reflection") {
             for(let i = 0; i < tir_rays.length; i++){
                 ctx.draw(tir_rays[i]);
@@ -7156,10 +7646,7 @@ function update(current_time){
         }
         else if(scene_id == "scene_spectrum"){
             ctx.draw(spectrum);
-            ctx.draw(arrow_spectrum_1);
-            ctx.draw(arrow_spectrum_2);
-            ctx.draw(arrow_spectrum_3);
-            ctx.draw(arrow_spectrum_4);
+            ctx.draw(spectrum_background);
             wave_param_spectrum.time += 7.0*delta_time;
             spectrum_wave.color = wavelength_to_rgb(wave_param_spectrum.frequency, 3.35, 2.14);
             ctx.update_wave_3d(spectrum_wave, wave_param_spectrum, lines_segments_3d);
@@ -7530,7 +8017,7 @@ function update(current_time){
             ctx.draw(hemisphere, {"alpha": 0.4});
 
             gl.clear(gl.DEPTH_BUFFER_BIT);
-            
+
             ctx.draw(outgoing_light_arrow);
             ctx.draw(incoming_light_arrow);
             ctx.draw(normal_arrow);
@@ -7547,14 +8034,14 @@ function update(current_time){
             ctx.draw(ctx.text_buffers["outgoing_light"], {}, ui_camera_reflection_3d);
             ctx.text_buffers["outgoing_light_sub"].transform = mat4_mat4_mul(scale_3d([0.003, 0.003, 0.003]), translate_3d(vec3_add(outgoing_light_text_position, vec3_add(outgoing_light_text_offset, [0.12, -0.05, 0]))));
             ctx.draw(ctx.text_buffers["outgoing_light_sub"], {}, ui_camera_reflection_3d);
-            
+
             let incoming_light_text_position = weird_thing(scene, ui_camera_reflection_3d, incoming_light_arrow_start);
             let incoming_light_text_offset = [0.1, 0, 0];
             ctx.text_buffers["incoming_light"].transform = mat4_mat4_mul(scale_3d([0.0045, 0.0045, 0.0045]), translate_3d(vec3_add(incoming_light_text_position, incoming_light_text_offset)));
             ctx.draw(ctx.text_buffers["incoming_light"], {}, ui_camera_reflection_3d);
             ctx.text_buffers["incoming_light_sub"].transform = mat4_mat4_mul(scale_3d([0.003, 0.003, 0.003]), translate_3d(vec3_add(incoming_light_text_position, vec3_add(incoming_light_text_offset, [0.12, -0.05, 0]))));
             ctx.draw(ctx.text_buffers["incoming_light_sub"], {}, ui_camera_reflection_3d);
-            
+
             let normal_text_position = weird_thing(scene, ui_camera_reflection_3d, normal_arrow_end);
             let normal_text_offset = [0.1, 0, 0];
             ctx.text_buffers["normal"].transform = mat4_mat4_mul(scale_3d([0.0045, 0.0045, 0.0045]), translate_3d(vec3_add(normal_text_position, normal_text_offset)));
@@ -7627,18 +8114,6 @@ function update(current_time){
             for(let sphere of ejected_spheres){
                 ctx.draw(sphere);
             }
-
-            ctx.gl.bindFramebuffer(ctx.gl.FRAMEBUFFER, postprocess_framebuffer);
-            gl.clearColor(0, 0, 0, 0);
-            gl.scissor(0, 0, gl.canvas.width, gl.canvas.height);
-            gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-            sun_core.transform = scale_3d([1.5, 1.5, 1.5]);
-            gl.colorMask(false, false, false, false);
-            ctx.draw(sun_surface);
-            ctx.draw(sun_cross);
-            gl.colorMask(true, true, true, true);
-            ctx.draw(sun_core);
-            ctx.gl.bindFramebuffer(ctx.gl.FRAMEBUFFER, null);
 
             gl.depthFunc(gl.ALWAYS);
 
@@ -8134,14 +8609,27 @@ async function get_texture(ctx, url){
     try {
         let res = await fetch(url);
         let blob = await res.blob();
-        let image = await createImageBitmap(blob);
-
         let texture = gl.createTexture();
-        gl.bindTexture(gl.TEXTURE_2D, texture);
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-        gl.generateMipmap(gl.TEXTURE_2D);
+
+        if(url.endsWith(".hdr")){
+            let array_buffer = await blob.arrayBuffer();
+            let hdr = await parse_hdr(array_buffer);
+            gl.bindTexture(gl.TEXTURE_2D, texture);
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, hdr.width, hdr.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, hdr.data);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+            gl.generateMipmap(gl.TEXTURE_2D);
+        }
+        else{
+            let image = await createImageBitmap(blob);
+            gl.bindTexture(gl.TEXTURE_2D, texture);
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+            gl.generateMipmap(gl.TEXTURE_2D);
+        }
 
         return texture;
     } catch (err) {
@@ -8155,93 +8643,154 @@ for(let texture of Object.values(textures)){
     });
 }
 
-async function get_texture_brdf(ctx, url){
-    const gl = ctx.gl;
-    try {
-        let res = await fetch(url);
-        let blob = await res.blob();
-        let image = await createImageBitmap(blob);
+function parse_hdr(array_buffer) {
+    const data = new Uint8Array(array_buffer);
+    let pos = 0;
 
-        let texture = gl.createTexture();
-        gl.bindTexture(gl.TEXTURE_2D, texture);
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-        gl.generateMipmap(gl.TEXTURE_2D);
-
-        return texture;
-    } catch (err) {
-        console.error(err);
+    let header = '';
+    while (pos < data.length) {
+        const char = String.fromCharCode(data[pos++]);
+        header += char;
+        if (header.endsWith('\n\n')) break;
     }
-};
 
-get_texture_brdf(ctx, brdf_lut.path).then(data => {
-    brdf_lut.texture = data;
-});
+    let line = '';
+    while (pos < data.length) {
+        const char = String.fromCharCode(data[pos++]);
+        if (char === '\n') break;
+        line += char;
+    }
 
-async function get_diffuse_envmap(ctx, path) {
+    const match = line.match(/-Y (\d+) \+X (\d+)/);
+    if (!match) throw new Error('Invalid HDR format');
+
+    const height = parseInt(match[1]);
+    const width = parseInt(match[2]);
+
+    const rgba_data = new Uint8Array(width * height * 4);
+    let out_pos = 0;
+
+    for (let y = 0; y < height; y++) {
+        if (data[pos] === 2 && data[pos + 1] === 2) {
+            pos += 4;
+
+            const scanline = new Uint8Array(width * 4);
+            for (let channel = 0; channel < 4; channel++) {
+                let x = 0;
+                while (x < width) {
+                    let code = data[pos++];
+                    if (code > 128) {
+                        const count = code - 128;
+                        const value = data[pos++];
+                        for (let i = 0; i < count; i++) {
+                            scanline[x * 4 + channel] = value;
+                            x++;
+                        }
+                    } else {
+                        const count = code;
+                        for (let i = 0; i < count; i++) {
+                            scanline[x * 4 + channel] = data[pos++];
+                            x++;
+                        }
+                    }
+                }
+            }
+
+            for (let x = 0; x < width; x++) {
+                const r = scanline[x * 4];
+                const g = scanline[x * 4 + 1];
+                const b = scanline[x * 4 + 2];
+                const e = scanline[x * 4 + 3];
+
+                if (e === 0) {
+                    rgba_data[out_pos++] = 0;
+                    rgba_data[out_pos++] = 0;
+                    rgba_data[out_pos++] = 0;
+                    rgba_data[out_pos++] = 255;
+                } else {
+                    const f = Math.pow(2, e - 128) / 255;
+                    rgba_data[out_pos++] = Math.min(255, Math.floor(r * f * 255));
+                    rgba_data[out_pos++] = Math.min(255, Math.floor(g * f * 255));
+                    rgba_data[out_pos++] = Math.min(255, Math.floor(b * f * 255));
+                    rgba_data[out_pos++] = 255;
+                }
+            }
+        } else {
+            for (let x = 0; x < width; x++) {
+                const r = data[pos++];
+                const g = data[pos++];
+                const b = data[pos++];
+                const e = data[pos++];
+
+                if (e === 0) {
+                    rgba_data[out_pos++] = 0;
+                    rgba_data[out_pos++] = 0;
+                    rgba_data[out_pos++] = 0;
+                    rgba_data[out_pos++] = 255;
+                } else {
+                    const f = Math.pow(2, e - 128) / 255;
+                    rgba_data[out_pos++] = Math.min(255, Math.floor(r * f * 255));
+                    rgba_data[out_pos++] = Math.min(255, Math.floor(g * f * 255));
+                    rgba_data[out_pos++] = Math.min(255, Math.floor(b * f * 255));
+                    rgba_data[out_pos++] = 255;
+                }
+            }
+        }
+    }
+
+    return { data: rgba_data, width, height };
+}
+
+async function create_envmap_texture(ctx, files, file_names) {
     const gl = ctx.gl;
     const texture = gl.createTexture();
-
     gl.bindTexture(gl.TEXTURE_2D, texture);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.MIRRORED_REPEAT);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.MIRRORED_REPEAT);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_BASE_LEVEL, 0);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAX_LEVEL, file_names.length - 1);
 
-    const { bitmap, width, height } = await new Promise((resolve, reject) => {
-        const tga = new TgaLoader();
-        tga.open(path, () => {
-            const canvas = tga.getCanvas();
-            createImageBitmap(canvas).then(bitmap => resolve({ bitmap, width: canvas.width, height: canvas.height }))
-                                  .catch(reject);
-        }, reject);
-    });
-
-    gl.bindTexture(gl.TEXTURE_2D, texture);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, bitmap);
-    gl.generateMipmap(gl.TEXTURE_2D);
+    for (let level = 0; level < file_names.length; level++) {
+        const file = files.find(f => f.name === file_names[level]);
+        const array_buffer = await file.async("arraybuffer");
+        const { data, width, height } = parse_hdr(array_buffer);
+        gl.bindTexture(gl.TEXTURE_2D, texture);
+        gl.texImage2D(gl.TEXTURE_2D, level, gl.RGBA, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, data);
+    }
 
     return texture;
 }
 
-async function get_specular_envmap(ctx, paths) {
-    const gl = ctx.gl;
-    const texture = gl.createTexture();
+(async () => {
+    for (let name in envmaps) {
+        const envmap = envmaps[name];
+        envmap.name = name;
+        envmap.files = [];
+        envmap.specular_texture = null;
+        envmap.diffuse_texture = null;
 
-    gl.bindTexture(gl.TEXTURE_2D, texture);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        const res = await fetch(envmap.path);
+        const blob = await res.blob();
+        const zip = await JSZip.loadAsync(blob);
 
-    for (let level = 0; level < paths.length; level++) {
-        const url = paths[level];
-        const { bitmap, width, height } = await new Promise((resolve, reject) => {
-            const tga = new TgaLoader();
-            tga.open(url, () => {
-                const canvas = tga.getCanvas();
-                createImageBitmap(canvas).then(bitmap => resolve({ bitmap, width: canvas.width, height: canvas.height }))
-                                      .catch(reject);
-            }, reject);
+        zip.forEach((relative_path, file) => {
+            envmap.files.push(file);
         });
 
-        gl.bindTexture(gl.TEXTURE_2D, texture);
-        gl.texImage2D(gl.TEXTURE_2D, level, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, bitmap);
+        const mipmap_names = [];
+        for (let i = 0; i < 10; i++) {
+            const filename = `m${i}.hdr`;
+            if (envmap.files.find(f => f.name === filename)) {
+                mipmap_names.push(filename);
+            } else {
+                break;
+            }
+        }
+
+        envmap.specular_texture = await create_envmap_texture(ctx, envmap.files, mipmap_names);
+        envmap.diffuse_texture = await create_envmap_texture(ctx, envmap.files, ['irradiance.hdr']);
     }
-
-    return texture;
-}
-
-get_specular_envmap(ctx, envmap["specular"].path).then(texture => {
-    envmap["specular"].texture = texture;
-});
-
-get_diffuse_envmap(ctx, envmap["diffuse"].path).then(texture => {
-    envmap["diffuse"].texture = texture;
-});
+})();
 
 function parse_fnt(fnt_text) {
     const lines = fnt_text.split("\n").map(line => line.trim()).filter(line => line);

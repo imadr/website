@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>imad rahmoune</title>
+    <link>https://imadrahmoune.com/</link>
+    <description>Personal projects and articles</description>
+    <lastBuildDate>Fri, 24 Oct 2025 10:00:00 GMT</lastBuildDate>
+    <language>en-us</language>
+
+    <item>
+      <title>Physically based rendering from first principles</title>
+      <link>https://yourwebsite.com/pbr/</link>
+      <description>Article explaining the physics and math of PBR</description>
+      <category>Rendering, Graphics</category>
+    </item>
+
+    <item>
+      <title>How Apple's Liquid Glass (probably) works</title>
+      <link>https://yourwebsite.com/liquid-glass/</link>
+      <description>Article explaining how to recreate Apple's Liquid Glass effect</description>
+      <category>Rendering, Shader</category>
+    </item>
+
+    <item>
+      <title>Raymarching explained interactively</title>
+      <link>https://yourwebsite.com/raymarching-explained-interactively/</link>
+      <description>Interactive tutorial on how to implement a raymarcher in a fragment shader</description>
+      <category>Rendering, Tutorial, Interactive</category>
+    </item>
+
+    <item>
+      <title>Rotations with quaternions</title>
+      <link>https://yourwebsite.com/rotations-with-quaternions/</link>
+      <description>Explaining rotations with quaternions, with code example</description>
+      <category>Mathematics, Tutorial, C</category>
+    </item>
+
+    <item>
+      <title>🔥 blaz</title>
+      <link>https://github.com/imadr/blaz</link>
+      <description>3D engine with no dependencies, written entirely from scratch</description>
+      <category>C++, Engine, Rendering</category>
+    </item>
+
+    <item>
+      <title>Procedural terrain generation</title>
+      <link>https://yourwebsite.com/terrain-generation/</link>
+      <description>Terrain generation using perlin noise and other stuff</description>
+      <category>Procgen, Rendering</category>
+    </item>
+
+    <item>
+      <title>Cross-platform window in C</title>
+      <link>https://yourwebsite.com/cross-platform-window-in-c/</link>
+      <description>Creating cross-platform windows in C</description>
+      <category>Platform, Tutorial</category>
+    </item>
+
+    <item>
+      <title>Color picker</title>
+      <link>https://yourwebsite.com/color-picker/</link>
+      <description>Color picker useful for graphics programming</description>
+      <category>Tool</category>
+    </item>
+
+    <item>
+      <title>Habit Tracker</title>
+      <link>https://yourwebsite.com/habit/</link>
+      <description>Minimalist habit tracker</description>
+      <category>Tool</category>
+    </item>
+
+    <item>
+      <title>Japanese learning tool</title>
+      <link>https://yourwebsite.com/japanese-learning/</link>
+      <description>Learn hiragana and katakana</description>
+      <category>Tool</category>
+    </item>
+
+  </channel>
+</rss>
