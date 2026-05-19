@@ -1,0 +1,14 @@
+{
+    "attributes": [
+        { "name": "position_attrib", "size": 3 }
+    ],
+    "buffer": [
+        0, 0, 0,
+        1, 0, 0,
+        0, 1, 0,
+        0, 0, 1
+    ],
+    "indices": [
+        0, 1, 0, 2, 0, 3
+    ]
+}

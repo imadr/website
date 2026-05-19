@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/inter-ui/3.19.3/inter.css" rel="stylesheet">
+    <style>
+    *{
+        box-sizing: border-box;
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+    ::selection {
+        background-color: var(--darker-color);
+        color: var(--base-color);
+    }
+    body {
+        background-color: var(--base-color);
+        color: var(--dark-color);
+        margin: 0;
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        font-weight: 600;
+        transition: background-color 0.5s ease;
+    }
+    .color-button {
+        position: fixed;
+        top: 2rem;
+        background: var(--base-color);
+        border: 2px solid var(--darker-color);
+        color: var(--darker-color);
+        padding: 0.5rem 1rem;
+        border-radius: 6px;
+        cursor: pointer;
+        font-family: 'Inter', sans-serif;
+        font-weight: 600;
+        font-size: 0.9rem;
+        transition: all 0.3s ease;
+    }
+    .color-button:hover {
+        background: var(--darker-color);
+        color: var(--base-color);
+    }
+    .container {
+        display: flex;
+        gap: 2rem;
+        padding: 2rem;
+        flex-wrap: wrap;
+        justify-content: center;
+        max-width: 1200px;
+    }
+    .habit {
+        width: 200px;
+        opacity: 0;
+        transform: scale(0.8);
+        animation: habitAppear 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+        position: relative;
+    }
+    .habit-name {
+        font-size: 1.1rem;
+        font-weight: 700;
+        margin-bottom: 1rem;
+        letter-spacing: 0.05em;
+        color: var(--darker-color);
+        cursor: pointer;
+        padding: 0.2em;
+        transition: background-color 0.2s ease;
+    }
+    .habit-name:hover {
+        background-color: rgba(0, 0, 0, 0.05);
+    }
+    .habit-name-input {
+        font-size: 1.1rem;
+        font-weight: 700;
+        width: 100%;
+        border: none;
+        background: transparent;
+        color: var(--darker-color);
+        outline: none;
+        margin-bottom: 1rem;
+        padding: 0.2em;
+        letter-spacing: 0.05em;
+    }
+    .calendar {
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
+        gap: 0.4rem;
+        text-align: center;
+    }
+
+    .day-label {
+        font-size: 0.65rem;
+        color: var(--darker-color);
+        margin-bottom: 0.3rem;
+        font-weight: 700;
+        user-select: none;
+    }
+
+    .day {
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        background: var(--darker-color);
+        opacity: 0.3;
+        margin: auto;
+        cursor: pointer;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .day.completed {
+        opacity: 1;
+        transform: scale(1.1);
+    }
+
+    .day:hover {
+        opacity: 0.7;
+        transform: scale(1.1);
+    }
+
+    .add-habit {
+        width: 200px;
+        height: 220px;
+        border: 3px dashed var(--darker-color);
+        border-radius: 8px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        opacity: 0.6;
+        transition: all 0.3s ease;
+        user-select: none;
+    }
+
+    .add-habit:hover {
+        opacity: 1;
+        transform: scale(1.02);
+    }
+
+    .add-habit-plus {
+        font-size: 3rem;
+        color: var(--darker-color);
+        margin-bottom: 0.5rem;
+    }
+
+    .delete-habit {
+        position: absolute;
+        top: 0;
+        right: 0;
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        border: none;
+        background: transparent;
+        color: var(--darker-color);
+        cursor: pointer;
+        opacity: 0.6;
+        transition: all 0.2s ease;
+        font-size: 1.2rem;
+        line-height: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0;
+    }
+
+    .delete-habit:hover {
+        opacity: 1;
+        transform: scale(1.1);
+    }
+
+    .confirm-modal {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%) scale(0.9);
+        background: var(--base-color);
+        padding: 1.5rem;
+        border-radius: 12px;
+        opacity: 0;
+        pointer-events: none;
+        transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+        z-index: 1000;
+        text-align: center;
+        color: var(--darker-color);
+    }
+
+    .confirm-modal.active {
+        opacity: 1;
+        pointer-events: all;
+        transform: translate(-50%, -50%) scale(1);
+    }
+
+    .modal-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.2);
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.3s ease;
+    }
+
+    .modal-overlay.active {
+        opacity: 1;
+        pointer-events: all;
+    }
+
+    .confirm-buttons {
+        display: flex;
+        gap: 1rem;
+        justify-content: center;
+        margin-top: 1.5rem;
+    }
+
+    .confirm-button {
+        padding: 0.5rem 1rem;
+        border: 2px solid var(--darker-color);
+        border-radius: 6px;
+        background: var(--base-color);
+        color: var(--darker-color);
+        font-family: 'Inter', sans-serif;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+
+    .confirm-button.delete {
+        background: var(--darker-color);
+        color: var(--base-color);
+    }
+
+    .confirm-button:hover {
+        transform: scale(1.05);
+    }
+
+   @keyframes habitAppear {
+        0% {
+            opacity: 0;
+            transform: scale(0.8);
+        }
+        50% {
+            transform: scale(1.1);
+        }
+        75% {
+            transform: scale(0.95);
+        }
+        100% {
+            opacity: 1;
+            transform: scale(1);
+        }
+    }
+    @keyframes clickEffect {
+        0% { transform: scale(0.9); }
+        50% { transform: scale(1.2); }
+        100% { transform: scale(1.1); }
+    }
+    .day.clicking {
+        animation: clickEffect 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    #month{
+        color: var(--darker-color);
+    }
+    .day.today {
+        border-radius: 30%;
+        outline: 3px solid white;
+    }
+    h1{
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 350px;
+    }
+    #month {
+        width: 350px;
+        text-align: center;
+    }
+    .month-button {
+        background: transparent;
+        color: var(--darker-color);
+        padding: 0.5rem;
+        border: none;
+        cursor: pointer;
+        font-family: 'Inter', sans-serif;
+        font-weight: 600;
+        font-size: 2rem;
+        transition: all 0.3s ease;
+        flex-shrink: 0;
+        width: 50px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .month-button:hover {
+        transform: scale(1.1);
+    }
+    </style>
+</head>
+<body>
+<h1><button class="month-button" onclick="change_month(-1)">←</button><span id="month"></span><button class="month-button" onclick="change_month(1)">→</button></h1>
+<div class="container" id="habits_container">
+    <div class="add-habit" onclick="add_habit()">
+        <div class="add-habit-plus">+</div>
+    </div>
+</div>
+
+<div class="modal-overlay" id="modal_overlay"></div>
+<div class="confirm-modal" id="confirm_modal">
+    <div>Delete this habit?</div>
+    <div class="confirm-buttons">
+        <button class="confirm-button" onclick="hide_confirm_modal()">Cancel</button>
+        <button class="confirm-button delete" onclick="delete_habit()">Delete</button>
+    </div>
+</div>
+<script>
+let current_month = new Date().getMonth();
+let current_year = new Date().getFullYear();
+
+function update_month_display() {
+    const month_names = [
+        "January", "February", "March", "April", "May", "June",
+        "July", "August", "September", "October", "November", "December"
+    ];
+    document.getElementById("month").textContent = `${month_names[current_month]} ${current_year}`;
+}
+
+function change_month(direction) {
+    current_month += direction;
+    if (current_month < 0) {
+        current_month = 11;
+        current_year--;
+    } else if (current_month > 11) {
+        current_month = 0;
+        current_year++;
+    }
+    render_habits();
+}
+
+const days_of_week = ["S", "M", "T", "W", "T", "F", "S"];
+let habit_counter = 1;
+let habits = [
+    {name: "Reading", completed_days: []},
+    {name: "Workout", completed_days: []},
+    {name: "Coding", completed_days: []},
+    {name: "Running", completed_days: []},
+];
+
+function save_habits() {
+    localStorage.setItem("habits", JSON.stringify(habits));
+    localStorage.setItem("habit_counter", JSON.stringify(habit_counter));
+}
+
+function load_habits() {
+    habits = JSON.parse(localStorage.getItem("habits")) || [];
+    habit_counter = JSON.parse(localStorage.getItem("habit_counter")) || 1;
+    render_habits();
+}
+
+function make_editable(element) {
+    const current_text = element.textContent;
+    const input = document.createElement("input");
+    input.type = "text";
+    input.className = "habit-name-input";
+    input.value = current_text;
+
+    element.replaceWith(input);
+    input.focus();
+    input.select();
+
+    const save_changes = () => {
+        const new_name = input.value.trim() || current_text;
+        const div = document.createElement("div");
+        div.className = "habit-name";
+        div.textContent = new_name;
+        div.onclick = () => make_editable(div);
+        input.replaceWith(div);
+
+        const habit_index = habits.findIndex(h => h.name === current_text);
+        if (habit_index !== -1) habits[habit_index].name = new_name;
+        save_habits();
+    };
+
+    input.onblur = save_changes;
+    input.onkeypress = (e) => {
+        if (e.key === "Enter") {
+            save_changes();
+            input.blur();
+        }
+    };
+}
+
+function create_calendar(habit_name) {
+    const calendar = document.createElement("div");
+    calendar.className = "calendar";
+
+    days_of_week.forEach(day => {
+        const day_label = document.createElement("div");
+        day_label.className = "day-label";
+        day_label.textContent = day;
+        calendar.appendChild(day_label);
+    });
+
+    const first_day = new Date(current_year, current_month, 1).getDay();
+    for (let i = 0; i < first_day; i++) {
+        calendar.appendChild(document.createElement("div"));
+    }
+
+    const days_in_month = new Date(current_year, current_month + 1, 0).getDate();
+    const habit = habits.find(h => h.name === habit_name);
+
+    if (!habit.months) {
+        habit.months = {};
+    }
+    const month_key = `${current_year}-${current_month}`;
+    if (!habit.months[month_key]) {
+        habit.months[month_key] = [];
+    }
+
+    for (let i = 1; i <= days_in_month; i++) {
+        const day = document.createElement("div");
+        day.className = "day";
+        day.setAttribute("data-day", i);
+
+        const today = new Date();
+        if (current_year === today.getFullYear() && current_month === today.getMonth() && i === today.getDate()) {
+            day.classList.add("today");
+        }
+
+        if (habit.months[month_key].includes(i)) {
+            day.classList.add("completed");
+        }
+
+        day.onclick = () => {
+            day.classList.add("clicking");
+            day.classList.toggle("completed");
+            setTimeout(() => {
+                day.classList.remove("clicking");
+            }, 300);
+
+            if (habit.months[month_key].includes(i)) {
+                habit.months[month_key] = habit.months[month_key].filter(d => d !== i);
+            } else {
+                habit.months[month_key].push(i);
+            }
+
+            save_habits();
+        };
+
+        calendar.appendChild(day);
+    }
+
+    return calendar;
+}
+
+function render_habits() {
+    const container = document.getElementById("habits_container");
+    container.innerHTML = "";
+
+    habits.forEach(habit => {
+        const habit_div = document.createElement("div");
+        habit_div.className = "habit";
+
+        const name_div = document.createElement("div");
+        name_div.className = "habit-name";
+        name_div.textContent = habit.name;
+        name_div.onclick = () => make_editable(name_div);
+
+        const delete_btn = document.createElement("button");
+        delete_btn.className = "delete-habit";
+        delete_btn.textContent = "×";
+        delete_btn.onclick = () => confirm_delete(habit_div, habit.name);
+
+        habit_div.appendChild(name_div);
+        habit_div.appendChild(delete_btn);
+        habit_div.appendChild(create_calendar(habit.name));
+
+        container.appendChild(habit_div);
+    });
+
+    const add_habit_div = document.createElement("div");
+    add_habit_div.className = "add-habit";
+    add_habit_div.onclick = add_habit;
+    const add_plus = document.createElement("div");
+    add_plus.className = "add-habit-plus";
+    add_plus.textContent = "+";
+    add_habit_div.appendChild(add_plus);
+    container.appendChild(add_habit_div);
+    update_month_display();
+}
+
+let habit_to_delete = null;
+let habit_to_delete_name = null;
+
+function confirm_delete(habit, habit_name) {
+    habit_to_delete = habit;
+    habit_to_delete_name = habit_name;
+    document.getElementById("modal_overlay").classList.add("active");
+    document.getElementById("confirm_modal").classList.add("active");
+    save_habits();
+}
+
+function hide_confirm_modal() {
+    document.getElementById("modal_overlay").classList.remove("active");
+    document.getElementById("confirm_modal").classList.remove("active");
+    habit_to_delete = null;
+    habit_to_delete_name = null;
+}
+
+function delete_habit() {
+    if (habit_to_delete) {
+        habits = habits.filter(h => h.name !== habit_to_delete_name);
+        habit_to_delete.remove();
+        hide_confirm_modal();
+        save_habits();
+    }
+}
+
+function add_habit() {
+    let habit_name = `New Habit ${habit_counter++}`;
+    habits.push({ name: habit_name, months: {} });
+    save_habits();
+
+    const container = document.getElementById("habits_container");
+    const add_button = container.querySelector(".add-habit");
+
+    const habit_div = document.createElement("div");
+    habit_div.className = "habit";
+
+    const name_div = document.createElement("div");
+    name_div.className = "habit-name";
+    name_div.textContent = habit_name;
+    name_div.onclick = () => make_editable(name_div);
+
+    const delete_btn = document.createElement("button");
+    delete_btn.className = "delete-habit";
+    delete_btn.textContent = "×";
+    delete_btn.onclick = () => confirm_delete(habit_div, habit_name);
+
+    habit_div.appendChild(name_div);
+    habit_div.appendChild(delete_btn);
+    habit_div.appendChild(create_calendar(habit_name));
+
+    container.insertBefore(habit_div, add_button);
+}
+
+function generate_pastel_color() {
+    const hue = Math.floor(Math.random() * 360);
+    const saturation = 35 + Math.random() * 15;
+    const lightness = 70 + Math.random() * 10;
+    return {
+        h: hue,
+        s: saturation,
+        l: lightness
+    };
+}
+
+function get_hsl_string(color) {
+    return `hsl(${color.h}, ${color.s}%, ${color.l}%)`;
+}
+
+function get_darker_shade(color, amount) {
+    return {
+        h: color.h,
+        s: color.s,
+        l: Math.max(0, color.l - amount)
+    };
+}
+
+function randomize_colors() {
+    const base_color = generate_pastel_color();
+    const darker_color = get_darker_shade(base_color, 45);
+    document.documentElement.style.setProperty("--base-color", get_hsl_string(base_color));
+    document.documentElement.style.setProperty("--darker-color", get_hsl_string(darker_color));
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+    load_habits();
+    randomize_colors();
+});
+</script>
+</body>
+</html>

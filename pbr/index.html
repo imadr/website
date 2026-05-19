@@ -1,0 +1,820 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Physically based rendering from first principles</title>
+    <link rel="icon" type="image/x-icon" href="/favicon.ico">
+
+    <meta name="description" content="Physically based rendering from first principles">
+    <meta name="author" content="imad">
+
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:site" content="@imadr_">
+    <meta name="twitter:title" content="Physically based rendering from first principles">
+    <meta name="twitter:image" content="https://imadrahmoune.com/pbr/img.png">
+    <meta name="twitter:image:alt" content="Physically based rendering from first principles">
+
+    <meta property="og:title" content="Physically based rendering from first principles">
+    <meta property="og:description" content="Physically based rendering from first principles">
+    <meta property="og:image" content="https://imadrahmoune.com/pbr/img.png">
+    <meta property="og:type" content="article">
+
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="mathdisp.css">
+</head>
+<body>
+    <canvas id="main-canvas"></canvas>
+    <h1 id="main-title">Physically based rendering from first principles</h1>
+    <p class="intro">In this interactive article, we will explore the physical phenomena that create light and the fundamental laws governing its interaction with matter. We will learn how our human eyes capture light and how our brains interpret it as visual information. We will then model approximations of these physical interactions and learn how to create physically realistic renderings of various materials.</p>
+    <h1>Chapter 1: What is light?</h1>
+    <p>We are all familiar with light: it’s the <em>thing</em> that allows us to see the world, distinguish colors and textures, and keeps the universe from being a dark, lifeless void. But precisely defining what light is has proven to be a tricky question.<p>
+    <p>Throughout history, many philosophers (and later, physicists) studied light in an effort to demystify its nature. Some ancient Greeks considered it to be one of the four fundamental elements that composed the universe: beams of fire emanating from our eyes.</p>
+    <p>Descartes proposed that light behaved like waves, while Newton thought that it consisted of tiny particles of matter called corpuscles.</p>
+
+    <p>Each of these more or less scientific theories explained some aspects of light's behavior, but none could account for all of them in a single, unified framework. That was until the 1920s when physicists came up with <strong>quantum electrodynamics</strong>. This theory is, as of now, the most accurate way to describe every interaction of light and matter.</p>
+
+    <p>You can hover the diagram below to see which light's phenomena can be explained using each model:</p>
+
+<div class="circle-thing">
+    <div class="circle-left">
+        <div class="circle" id="circle-quantum">
+            <div class="label">Quantum Optics</div>
+            <div class="circle" id="circle-electromagnetic">
+                <div class="label">Electromagnetic Optics</div>
+                <div class="circle" id="circle-wave">
+                    <div class="label">Wave Optics</div>
+                    <div class="circle selected-circle" id="circle-ray">
+                        <div class="label">Ray Optics</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="circle-right">
+        <ul>
+            <li id="phenomenon-1" class="highlighted">Reflection / Refraction / Transmission</li>
+            <li id="phenomenon-2" class="grayed">Diffraction</li>
+            <li id="phenomenon-3" class="grayed">Interference</li>
+            <li id="phenomenon-4" class="grayed">Polarization</li>
+            <li id="phenomenon-5" class="grayed">Dispersion</li>
+            <li id="phenomenon-6" class="grayed">Fluorescence</li>
+            <li id="phenomenon-7" class="grayed">Phosphorescence</li>
+        </ul>
+    </div>
+</div>
+    <br>
+
+    <p>For the purpose of computer graphics, the ray optics model is accurate enough at simulating light interactions. But for the sake of scientific curiosity, we will explore some aspects of the other models, starting with <strong>electromagnetism</strong>.</p>
+
+    <h2>The Electric force</h2>
+    <p>One of the fundamental properties of matter is the electric charge, and it comes in two types: <strong class="red">positive</strong> and <strong class="blue">negative</strong>.<br>Charges determine how particles interact: charges of the same type repel each other, while opposite charges attract.</p>
+    <p>The amount of force affecting two charged particles is calculated using <strong>Coulomb's law:</strong></p>
+    <div class="math math-centred" data="F = k_{e} \frac{q_{1} q_{2}}{r^{2}}"></div>
+
+
+    <p>Where <span class="math" data="k_{e}"></span> is a constant, <span class="math" data="q_{1}"></span>  and <span class="math" data="q_{2}"></span> are the quantities of each charge, and <span class="math" data="r"></span> is the distance between them.</p>
+
+    <p>You can <strong>drag around</strong> these charges to see how the electric force affects them:</p>
+    <div class="canvas" id="scene_charges"></div>
+    <p>Every charge contributes to the <strong>electric field</strong>, it represents the force exerted on other charges at each point in space. We can visualize the electric field with a <button class="button-inline active" id="display-field-line">field line</button> or a <button class="button-inline" id="display-vector-field">vector field</button> :</p><br>
+    <div class="canvas" id="scene_electric_field"></div>
+    <br>
+    <p>Another way to visualize the electric field is by coloring each point in space with a <strong class="blue-red-gradient">color gradient</strong> representing the force experienced by a small charge at that point:
+    <div class="canvas" id="scene_field_gradient"></div>
+
+    <h2>Special relativity and magnetism</h2>
+    <p>Imagine a moving object carrying a <strong class="red">positive electric charge</strong> placed under a cable carrying an electrical current.<br>
+    From <button data-reference="0" class="button-reference-inline button-inline active">our point of view</button>, the object and the negative charges in the wire are moving, and since the <strong class="red">positive</strong> and <strong class="blue">negative</strong> charges in the cable compensate each other, the object doesn't experience any force.</p>
+    <p>In the <button data-reference="1" class="button-reference-inline button-inline">object's frame of reference</button>, it appears to be static alongside the <strong class="blue">negative</strong> charges, while the <strong class="red">positive</strong> charges are moving to the left, and the object still doesn't get affected by any force.</p>
+    <p>Now if we take into account <button data-reference="2" class="button-reference-inline button-inline">special relativity</button>, the moving charges in the wire appear "stretched" due to relativistic effects, causing a change in the distribution of charges. This stretching leads to a repulsive force between the object and the wire, which we interpret as <strong>magnetism.</strong></p>
+    <div class="canvas" id="scene_relativity"></div>
+    <div class="button-group">
+        <button data-reference="0" class="button-reference button active">Observer's frame of reference</button>
+        <button data-reference="1" class="button-reference button">Object's frame of reference</button>
+        <button data-reference="2" class="button-reference button">Special relativity</button>
+    </div>
+    <h2>Maxwell's equations</h2>
+    <p>Maxwell's equations describe how electric and magnetic fields are created and interact with each other. We will focus on the third and fourth equations.</p>
+    <p>Maxwell's third equation, known as <strong>Faraday's law of induction</strong>, shows how changing magnetic fields can generate electric currents.<br>An example of this is moving a magnet inside a coil, which induces an electric current in the wire due to the changing magnetic field.</p>
+    <p>This is the principle behind electric generators: Mechanical energy (like the flow of steam) is used to move magnets inside coils (a turbine), converting it to electrical energy through electromagnetic induction.</p>
+    <p>By moving the magnet left and right, we can see the voltmeter picking up a current and the electric charges in the coil moving back and forth:</p>
+    <div class="canvas" id="scene_induction"></div>
+    <div style="display: flex;margin-top: 2em;">
+        <div class="checkbox-container">
+            <label style="font-weight: bold;">Show magnetic field</label><br>
+            <input type="checkbox" id="show-field-checkbox" autocomplete="false">
+        </div>
+        <div class="slider-container">
+            <label style="font-weight: bold;">Slide the magnet</label><br><input id="magnet-input" type="range" min="-1" max="1" step="0.01" data-color="#888">
+        </div>
+    </div>
+
+    <br>
+    <p>Maxwell's fourth and final equation, <strong>Ampère's Law</strong>, illustrates how electric currents (moving charges) produce magnetic fields around them. This is the basis of how electromagnets function:</p>
+    <div class="canvas" id="scene_ampere"></div>
+    <div style="display: flex;margin-top: 2em;">
+        <div class="slider-container">
+            <label style="font-weight: bold;font-size: 1.5em;">Voltage: <span id="voltage-display">0</span> volts</label><br><input id="voltage-input-ampere" type="range" min="-1" max="1" step="0.01" data-color="#888">
+        </div>
+    </div>
+    <br>
+    <p>Together, these laws demonstrate how electric and magnetic fields are interdependent. A changing magnetic field generates an electric field, and a changing electric field generates a magnetic field.</p>
+    <p>This continuous cycle enables <strong>self-sustaining, self-propagating electromagnetic waves</strong>, which can travel through space without requiring a medium.</p>
+    <h2>Electromagnetic radiation</h2>
+    <p>Electromagnetic radiation consists of waves created by synchronized oscillations of electric and magnetic fields. These waves travel at the speed of light in a vacuum.</p>
+    <p>The <strong>amplitude</strong> of a wave determines the maximum strength of its electric or magnetic field. It represents the wave's intensity or "brightness". In quantum terms, a higher amplitude corresponds to a greater number of photons.</p>
+    <p>The <strong>frequency</strong> of a wave determines the energy of the individual photons that compose it. Higher frequencies correspond to shorter wavelengths and more energetic photons.</p>
+    <div class="canvas" id="scene_wave"></div>
+    <div class="slider-container">
+        <label>Amplitude</label><input id="amplitude-input" type="range" min="0.2" max="1" step="0.01" data-color="#888">
+    </div>
+    <div class="slider-container" style="margin-bottom: 3em;">
+        <label>Frequency</label><input id="frequency-input" type="range" min="0.5" max="4" step="0.01" data-color="#888">
+    </div>
+
+    <p>When the wavelength falls between approximately 400 nm and 700 nm, the human eye perceives it as <strong>visible light</strong>.</p>
+    <p>While other wavelengths are invisible to the human eye, many are quite familiar in everyday life.
+For example, microwaves are used for Wi-Fi and cooking, X-rays are used in medical imaging, and radio waves enable communication.</p>
+<p>Some insects, like bees, can see ultraviolet light, which helps them locate flowers by revealing hidden patterns and markings created by specialized pigments, such as flavonoids, that reflect UV wavelengths.</p>
+<p>On the other end of the spectrum, gamma rays are highly energetic and can be dangerous, they are generated by radioactive decay, nuclear bombs, and space phenomena like supernovas.</p>
+    <div class="canvas" id="scene_spectrum"></div>
+    <div class="slider-container" style="margin-top: 2em;width: 100%;">
+        <label>Frequency</label><input id="frequency-input-spectrum" type="range" min="0" max="1" step="0.001" data-color="#888">
+    </div>
+
+    <h2>Generating Light</h2>
+    <p>There are many ways for light to be generated, the two most common ones we encounter everyday are incandescence and electroluminescence.</p>
+
+    <p><strong>Incandescence</strong> is the process by which a material emits visible light due to high temperature. It is how incandescent lightbulbs and the <strong>sun</strong> generates light.</p>
+    <p>An incandescent lightbulb produces light through the heating of a filament until it starts glowing. The filament is made of <strong>tungsten</strong>, an element with a high melting point, high durability, and a positive temperature coefficient of resistance, which means its resistance increases with temperature.</p>
+
+    <p>When we increase the current flowing through the filament, it starts heating up (Due to <strong>Joule heating</strong>), which increases the resistance in turn causing more heat to get dissipated. This feedback loop stabilizes at around 2500°C.</p>
+
+    <p>This heat makes the electrons in the filament wiggle and collide with each other, releasing photons in the process. This radiation can be approximated as <strong>Black-body radiation</strong>.</p>
+
+<div class="canvas" id="scene_bulb"></div>
+<div class="canvas" id="scene_bulb_graphs"></div>
+<div class="slider-container" style="margin-bottom: 4em;">
+    <label>Voltage</label><input id="voltage-input" type="range" min="0" max="220" step="0.001" data-color="#888">
+</div>
+
+<p><strong>The Sun</strong> also generates light by incandescence, but unlike the lightbulb's filament glowing via Joule heating, the Sun’s energy is produced by nuclear fusion in the core, where hydrogen nuclei fuse to form helium and release photons as gamma rays.<p>
+<p>These photons travel from the core through the radiative zone, getting absorbed and remitted countless times while shifting to longer wavelengths. After hundreds of thousands of years of bouncing around, the photons make it to the surface of the Sun, called the photosphere, where they get radiated away.</p>
+<p>Most (~49%) of the sun's emissions are in infrared, which is responsible for the heat we get on Earth, ~43% is visible light and the ~8% left is ultraviolet.</p>
+
+<div class="canvas" id="scene_sun"></div>
+
+<br>
+
+<p>Another way to generate light is by <strong>electroluminescence</strong>, this is the phenomenon that powers LEDs</p>
+
+<p>The main component of a light-emitting diode is a semiconductor chip. Semiconductors are materials whose electrical conductivity can be modified by mixing them with impurities in a process known as <strong>doping</strong>.</p>
+
+<p>Depending on the type of impurity (called the dopant) used in the mix, the semiconductor can be turned into either an <strong>n-type</strong>, which has extra electrons freely moving around, or a <strong>p-type</strong>, which has a lack of electrons and instead carrying an electron "hole", also moving around and acting as a positive charge.</p>
+
+<p>When you stick a p-type and an n-type semiconductor side by side, they form a <strong>p-n junction</strong>. When a current flows through the junction, the electrons and the holes recombine and emit photons in the process.</p>
+
+<div class="canvas" id="scene_led"></div>
+<br>
+<br>
+
+<p>Aside from incandescence and electroluminescence, which are the two most common sources of light we encounter in everyday life, light can come from other places. Some materials <a href="https://en.wikipedia.org/wiki/Fluorescence">glow when exposed to ultraviolet radiation</a>, <a href="https://en.wikipedia.org/wiki/Phosphorescence">others</a> absorb that radiation and re-emit it after some time. Some animals like fireflies use special <a href="https://en.wikipedia.org/wiki/Luciferase">enzymes</a> to produce light. You can read <a href="https://en.wikipedia.org/wiki/Luminescence">this page</a> to learn more about other sources of luminescence.</p>
+
+<h1>Chapter 2: Abstracting Away</h1>
+
+<p>In the previous chapter, we examined the nature of light and the various methods by which it can be emitted, we will now focus on how it interacts with matter.</p>
+
+<p>When a photon hits a material, it interacts with the electrons in the atoms and molecules of that material, then two things can happen, it can either be <strong>absorbed</strong> or <strong>scattered</strong>.</p>
+
+<p>The electrons occupy <strong>atomic orbitals</strong>: regions around the nucleus of the atom where an electron is most likely to be found. A higher orbital corresponds to a higher energy level of the electron.</p>
+<!-- <small>(Or in the case of molecules, <a href="https://en.wikipedia.org/wiki/Conjugated_system">conjugated systems</a>)</small> -->
+
+<p>If the photon has the energy needed to excite the electron to a higher energy level, the photon can be absorbed. Eventually the electron returns to a lower level and releases the energy as heat.</p>
+
+<p>If the photon does not get absorbed, its electric field will make the electrons oscillate in return and generate <strong>secondary waves</strong> that interfere constructively and destructively with the photon waves in complicated ways.</p>
+
+<p>We can simplify these complicated interactions by making a few assumptions about the material:</p>
+<ul>
+    <li>The material is <strong>homogeneous</strong>, as in the material has the same properties everywhere</li>
+    <li>The material is a <strong>perfectly smooth</strong> surface</li>
+</ul>
+<p>We can use Maxwell's equations to show that such a perfect flat material splits the incoming light waves into two parts: <strong>reflected</strong> and <strong>refracted</strong>.</p>
+
+<p>The angle of reflection is equal to the angle of incidence relative to the normal of the surface, as per the <strong>law of reflection</strong>:</p>
+
+<div class="two-cols">
+    <div class="canvas two-cols-scene" id="scene_reflection"></div>
+    <div class="slider-container">
+        <div class="math math-centred" id="law_reflection_equation"></div>
+        <label style="font-weight: bold;">Angle <span class="math" data="\theta_{1}"></span></label><input id="reflection-angle-input" type="range" min="-90" max="90" step="0.01" data-color="#888">
+    </div>
+</div>
+
+<br>
+<p>The angle of refraction is determined by how much slower (or faster) light travels through the material, that speed is defined by <strong>the index of refraction</strong>, and the angle is calculated using <strong>Snell's law</strong>:</p>
+
+<div class="math math-centred" data="n_{1} sin(\theta_{1}) = n_{2} sin(\theta_{2})"></div>
+<div class="math math-centred" data="\implies sin(\theta_{2}) = \frac{n_{1}}{n_{2}} sin(\theta_{1})"></div>
+<div class="math math-centred" data="\implies \theta_{2} = arcsin\leftparen\frac{n_{1}}{n_{2}} sin(\theta_{1})\rightparen"></div>
+<br>
+<div class="two-cols">
+    <div class="canvas two-cols-scene" id="scene_snells"></div>
+    <div class="slider-container">
+        <div class="math math-centred" id="snells_equation_1"></div>
+        <div style="display: flex;justify-content: center;gap: 2em;">
+            <div class="math math-centred" id="snells_equation_2"></div>
+            <div class="math math-centred" id="snells_equation_3"></div>
+        </div>
+        <div class="math math-centred" id="snells_equation_4"></div>
+        <label style="font-weight: bold;">Angle <span class="math" data="\theta_{1}"></span></label><br><input id="snells-angle-input" type="range" min="-90" max="90" step="0.01" data-color="#888">
+        <label style="font-weight: bold;">Index of refraction <span class="math" data="n_{1}"></span></label><br><input id="snells-ior1-input" type="range" min="1" max="2.5" step="0.01" data-color="#888">
+        <label style="font-weight: bold;">Index of refraction <span class="math" data="n_{2}"></span></label><br><input id="snells-ior2-input" type="range" min="1" max="2.5" step="0.01" data-color="#888">
+    </div>
+</div>
+
+<br>
+<p>At a <button class="button-inline" id="critical_angle_button">certain angle</button> and refractive indices light is no longer refracted and seems to disappear.</p>
+
+<p>The amount of light that is reflected and refracted is calculated using <strong>Fresnel equations</strong>.</p>
+
+<p>However, computing the full Fresnel equation in real time can be slow, so in 1994 Christophe <strong>Schlick</strong> came up with an approximation.</p>
+<p>First we compute the reflectance at zero degrees from the normal:</p>
+<div class="math math-centred" data="R_{0} = \leftparen\frac{n_{1} - n_{2}}{n_{1} + n_{2}}\rightparen^{2}"></div>
+
+<p>Then we plug <span class="math" data="R_{0}"></span> in the approximation function for the reflectance:</p>
+<div class="math math-centred" data="R_{\theta} \approx R_{0} + (1 - R_{0})(1 - cos\theta)^{5}"></div>
+
+<p>The transmitted (or refracted) light simply becomes:</p>
+<div class="math math-centred" data="T_{\theta} = 1 - R_{\theta}"></div>
+
+<div class="two-cols">
+    <div class="canvas two-cols-scene" id="scene_fresnel"></div>
+    <div class="slider-container">
+        <div class="math math-centred" id="fresnel_equation_1"></div>
+        <div class="math math-centred" id="fresnel_equation_2"></div>
+        <label style="font-weight: bold;">Angle <span class="math" data="\theta_{1}"></span></label><input id="fresnel-angle-input" type="range" min="-90" max="90" step="0.01" data-color="#888">
+        <label style="font-weight: bold;">Index of refraction <span class="math" data="n_{1}"></span></label><input id="fresnel-ior1-input" type="range" min="1" max="2.5" step="0.01" data-color="#888">
+        <label style="font-weight: bold;">Index of refraction <span class="math" data="n_{2}"></span></label><input id="fresnel-ior2-input" type="range" min="1" max="2.5" step="0.01" data-color="#888">
+    </div>
+</div>
+
+<p>If we try the <button class="button-inline" id="critical_angle_button_fresnel">previous configuration</button> where the refracted ray disappeared, we can now see it getting reflected back inside the medium, this is called <strong>total internal reflection</strong>.</p>
+
+<p>Total internal reflection gives rise to an interesting phenomenon called <strong>Snell's window</strong>. If you dive underwater and look up, the light above the surface is refracted through a circular window 96 degrees wide, and everything outside is a reflection of the bottom of the water.</p>
+
+<div class="canvas" id="scene_total_internal_reflection"></div>
+<div class="slider-container">
+    <label style="font-weight: bold;">Angle</label><br><input id="tir-angle-input" type="range" min="-90" max="90" step="0.01" data-color="#888">
+</div>
+
+<br>
+<p>This is what it looks underwater:</p>
+<div class="canvas" id="scene_snells_window"></div>
+<div class="slider-container">
+    <label style="font-weight: bold;">Water IOR</label><br><input id="water-ior-input" type="range" min="1.1" max="2.5" step="0.001" data-color="#888">
+</div>
+
+
+<h2>The Microfacet Model</h2>
+
+<p>Like we saw earlier, we can explain light reflecting and refracting using different models, depending on the size of the surface irregularities we are considering.</p>
+<p>For example, wave optics explains light interacting with matter as light waves diffracting on the surface nanogeometry.</p>
+<p>If we zoom out a bit and use ray optics, we consider light as straight line rays that reflect and refract on the surface microgeometry. With this model we can use the optical laws we described earlier: <strong>law of reflection, Snell's law, Fresnel equations</strong>.</p>
+<p>Now for rendering, we can zoom out even further and consider one pixel at a time, each pixel contains many microgeometry surfaces that we call a <strong>microfacet</strong>. We can use a statistical average of the microfacets in a pixel to simulate the appearance of the surface at that pixel, without considering each individual microfacet which would be unfeasible in real time.</p>
+<table>
+    <tr>
+        <th>Size</th>
+        <th>Model</th>
+        <th>Phenomenon</th>
+    </tr>
+    <tr>
+        <td>Nanogeometry</td>
+        <td>Wave optics</td>
+        <td>Light diffraction</td>
+    </tr>
+    <tr>
+        <td>Microgeometry</td>
+        <td>Ray optics</td>
+        <td>Reflection/refraction, change in local normal</td>
+    </tr>
+    <tr>
+        <td>Macrogeometry</td>
+        <td>BRDF</td>
+        <td>Statistical average over a pixel, a larger roughness generates a wider lobe</td>
+    </tr>
+</table>
+<br>
+<p>Here we can see a microgeometry surface, changing the <strong>roughness</strong> makes it more bumpy and the microfacets normals aren't aligned anymore:</p>
+<div class="canvas" id="scene_roughness_micro"></div>
+<div class="slider-container" style="margin-bottom: 3em;">
+    <label>Roughness</label><input id="roughness-input-micro" type="range" min="0" max="1" step="0.01" data-color="#888">
+</div>
+
+<p>At the macrogeometry level, a larger roughness value means light rays have a wider angle where they can spread out. The function that describes this angle is called <strong>bidirectional reflectance distribution function</strong>, we will discuss it in the next chapter.</p>
+<div class="canvas" id="scene_roughness_macro"></div>
+<div class="slider-container" style="margin-bottom: 3em;">
+    <label>Roughness</label><input id="roughness-input-macro" type="range" min="0" max="1" step="0.01" data-color="#888">
+</div>
+
+<p>When light hits the surface, it can get reflected in two ways: <strong>diffuse</strong> and <strong>specular</strong> reflection.</p>
+<p>The specular reflection obeys the law of reflection we saw before: the angle of reflection is equal to the angle of incidence.</p>
+<p>When the surface is rough and the microfacets are misaligned, specular reflection is spread over many directions. The set of these directions forms a shape called a lobe.</p>
+
+<div class="canvas" id="scene_specular"></div>
+<div class="slider-container" style="margin-bottom: 3em;">
+    <label>Roughness</label><input id="roughness-input-specular" type="range" min="1" max="55" step="0.01" data-color="#888">
+</div>
+
+<p>Diffuse reflection, on the other hand, happens when light is spread over many different directions. When the light is spread evenly over every direction, we call that surface <strong>Lambertian</strong>, and the reflection lobe looks like this:</p>
+
+<div class="canvas" id="scene_diffuse_lobe"></div>
+<br>
+<p>It is important to note that diffuse reflection is not caused by surface roughness. Its main cause is something called <strong>subsurface scattering</strong>: the light rays penetrate inside the material and bump into small particles, some light rays get absorbed by these particles while others get reflected back to the surface, which causes the light rays to exit in many different directions.</p>
+
+<p>Some materials exhibit purely specular reflection, while others have a mix of specular and diffuse. In our model we distinguish these in two types <strong>metals</strong> and <strong>non-metals</strong>.</p>
+
+<h2>Metals</h2>
+
+<p>Metals have a sea of free electrons that absorb light very easily when the photons enter a few nanometers deep inside the surface, so no subsurface scattering can occur. The light that isn't absorbed is reflected equally across the visible light spectrum, this is why metals have that distinct "silvery" gray color.</p>
+<p>Notable exceptions are <strong class="gold">gold</strong>, <strong class="copper">copper</strong>, <strong class="osmium">osmium</strong> and <strong class="caesium">caesium</strong>. Those metals absorb specific wavelengths which gives them their distinctive colors.</p>
+
+<div class="canvas" id="scene_metals"></div>
+
+<p>Changing the roughness of a metal only changes its specular reflection, making it more or less mirror-like. But there is no diffuse reflection at all.</p>
+<div class="canvas" id="scene_roughness_metal"></div>
+<div class="slider-container" style="margin-bottom: 3em;">
+    <label>Roughness</label><input id="roughness-input-metal" type="range" min="0" max="1" step="0.01" data-color="#888">
+</div>
+
+<h2>Non-metals</h2>
+
+<p>The second type of non-metallic materials we consider in our microfacet model are called <strong>dielectrics</strong>, these are materials that do not conduct electricity (insulators). They include <strong>plastic, wood, glass, water, diamond, air...</strong></p>
+
+<div class="canvas" id="scene_non_metals"></div>
+
+<p>When a photon hits a dielectric material, it only gets absorbed if its energy matches the electron's energy in the material. So light either gets reflected, and the specular reflection depends on the roughness of the surface.</p>
+<p>The light can also penetrate the surface and bounces around and interacts with particles inside the material until it exits the surface, causing diffuse reflection.</p>
+
+<div class="canvas" id="scene_roughness_non_metal"></div>
+<div class="slider-container" style="margin-bottom: 3em;">
+    <label>Roughness</label><input id="roughness-input-non-metal" type="range" min="0" max="1" step="0.01" data-color="#888">
+</div>
+
+<h2>Spectral Power Distribution</h2>
+
+<p>If we take the example of a <strong class="red">red apple</strong>. When we shine a white light (which contains all visible wavelengths) on it, the apple's pigments (anthocyanins) absorb most of the wavelengths like <strong class="violet">violet</strong>, <strong class="blue">blue</strong> and <strong class="green">green</strong> wavelengths, thus decreasing the intensity of those colors from the light. The remaining wavelengths, mostly <strong class="red">red</strong>, gets scattered off the apple's surface making us perceive the apple as red.</p>
+
+<div class="canvas" id="scene_apple"></div>
+
+<p>We can characterize the incoming light by describing the amount of energy it carries at each wavelength using a function called the <strong>Spectral Power Distribution</strong> or <strong>SPD</strong> for short.</p>
+<p>For example, below is the SPD for <a href="https://cie.co.at/datatable/cie-standard-illuminant-d65">D65</a>, a theoretical source of light standardized by The International Commission on Illumination (CIE). It represents the spectrum of average midday light in Western Europe or North America:</p>
+<div class="canvas" id="scene_spd"></div>
+<p>We can compare this SPD to <a href="https://en.wikipedia.org/wiki/Air_mass_(solar_energy)#Cases">AM0</a>, which is the measured solar radiation in outer space before entering Earth's atmosphere. Notice the absence of a dip in the ultraviolet range:</p>
+<div class="canvas" id="scene_spd_sun_space"></div>
+
+<p>And here is the SPD of a typical tungsten incandescent light:</p>
+<div class="canvas" id="scene_spd_lamp"></div>
+
+<h2>Spectral Reflectance Curve</h2>
+<p>The SPD shows us how much of each "color" a light is composed of. Another interesting function we can look at is called the spectral reflectance curve, which shows the fraction of incident light reflected by an object at each wavelength, effectivly representing the color of said object.</p>
+<p>Going back to our apple example, since it reflects most of its light in the red wavelength, its spectral reflectance curve might look like this:</p>
+<div class="canvas" id="scene_apple_reflectance"></div>
+
+<p>The light we see is the combination of the light spectral power distribution with the object spectral reflectance.</p>
+<p>If we shine a light on our red apple, depending on the wavelengths of the light, the final color we see changes. A <button data-color="white" class="white-light-button button-light-inline button-inline active">white light</button> makes the apple appear red, because it's like multiplying the apple's color by one. We get the same result with a <button data-color="red" class="red-light-button button-light-inline button-inline">red light</button>, because the apple reflects mostly in the red spectrum.<br>However if we shine a <button data-color="green" class="green-light-button button-light-inline button-inline">green light</button>, besides the leaf, the rest of the apple doesn't reflect any light, thus appearing black.</p>
+<p>On the top right you can see the SPD of the flashlight, under it the reflectance curve of the apple, and the resulting reflected light below it:</p>
+<div class="canvas" id="scene_apple_lights"></div>
+<div class="slider-container-buttons">
+    <div class="slider-group-vertical">
+        <input id="light-r-input" type="range" min="0" max="1" step="0.01" data-color="#ff0000">
+        <input id="light-g-input" type="range" min="0" max="1" step="0.01" data-color="#00ff00">
+        <input id="light-b-input" type="range" min="0" max="1" step="0.01" data-color="#0000ff">
+    </div>
+    <div class="button-group-vertical">
+        <button data-color="white" class="button-light button button-light-white active">White light</button>
+        <button data-color="red" class="button-light button button-light-red">Red light</button>
+        <button data-color="green" class="button-light button button-light-green">Green light</button>
+    </div>
+</div>
+
+<br><br>
+<p>If we now add a banana and shine a <button data-color="white" class="white-light-button button-light-inline-m button-inline active">white light</button>, we can obviously tell the apple and the banana apart, one being red while the other is yellow.<br>But what happens when the light is <button data-color="red" class="red-light-button button-light-inline-m button-inline">red</button>? Both objects appear reddish to our eyes, because the banana doesn't have any green light to reflect, making it lose its yellow color. This phenomenon is called <strong>metamerism</strong>.</p>
+<p>You can display the <button class="button-inline active" id="display-apple-curve">apple's curve</button> or the <button class="button-inline" id="display-banana-curve">banana's curve</button> :</p>
+
+<div class="canvas" id="scene_metamers"></div>
+<div class="slider-container-buttons">
+    <div class="slider-group-vertical">
+        <input id="light-r-input-m" type="range" min="0" max="1" step="0.01" data-color="#ff0000">
+        <input id="light-g-input-m" type="range" min="0" max="1" step="0.01" data-color="#00ff00">
+        <input id="light-b-input-m" type="range" min="0" max="1" step="0.01" data-color="#0000ff">
+    </div>
+    <div class="button-group-vertical">
+        <button data-color="white" class="button-light-m button button-light-white active">White light</button>
+        <button data-color="red" class="button-light-m button button-light-red">Red light</button>
+        <button data-color="green" class="button-light-m button button-light-green">Green light</button>
+    </div>
+</div>
+
+<br>
+<p>There are different types of metamerism, depending on when it happens during the light transport process. The apple and banana example is called <strong>illuminant metamerism</strong>, where objects that reflect light differently appear the same under some specific illumination.</p>
+<p><strong>Observer metamerism</strong> is when objects appear different between observers, a good example of this is <strong>colorblindness</strong>.</p>
+
+<h1>Chapter 3 : The Rendering equation</h1>
+<br>
+<div class="canvas" id="scene_reflection_3d"></div>
+
+<div id="rendering_equation"  class="math math-centred" data="\id{rendering_equation_lo}{*L_{o}*(p, \omega_{o})} = \integral_{\Omega}  \id{rendering_equation_brdf}{*BRDF*(\omega_{i}, \omega_{o}, \alpha)} \id{rendering_equation_li}{*L_{i}*(p, \omega_{i})} \id{rendering_equation_cosine}{(*n*\dot*\omega_{i}*)} d\omega_{i}"></div>
+<br>
+<ul>
+<li><span class="math" data="L_{o}(p, \omega_{o})"></span> is the outgoing light at point <span class="math" data="p"></span> to the direction <span class="math" data="\omega_{o}"></span></li>
+<li><span class="math" data="L_{i}(p, \omega_{i})"></span> is the incoming light at point <span class="math" data="p"></span> from the direction <span class="math" data="\omega_{i}"></span></li>
+<li>The <strong>BRDF</strong> (Bidirectional reflectance distribution function) is a function that tells us how much of the incoming light <span class="math" data="\omega_{i}"></span> is reflected to the outgoing direction <span class="math" data="\omega_{o}"></span> at point <span class="math" data="p"></span>.</li>
+<li>The dot product is called the <strong>cosine term</strong>.</li>
+</ul>
+
+
+<p>The rendering equation gives us the light reflected towards a direction <span class="math" data="L_{o}"></span> at a point <span class="math" data="p"></span> by summing all the incoming lights <span class="math" data="L_{i}"></span> at that point coming from direction <span class="math" data="\omega_{i}"></span> in the hemisphere <span class="math" data="\Omega"></span>, weighted by the BRDF at that point and the cosine term.</p>
+
+<p>Let's peel off this equation step by step, starting with the easiest part:</p>
+
+<h2>Lambert's cosine law</h2>
+
+<p>When a beam of light hits a surface, the area it touches is inversly proportional to the cosine of the angle of incidence. When the angle of incidence is <button class="button-inline" id="lamberts_cosine_law_button_perpendicular">perpendicular</button>, the area is at minimum and the intensity is concentrated, but the more <button class="button-inline" id="lamberts_cosine_law_button_grazing">grazing</button> the angle gets, the larger the area and the intensity gets spread out.</p>
+<div class="math math-centred" id="lamberts_cosine_law_equation"></div>
+
+<div class="canvas" id="scene_cosine_law"></div>
+<div class="slider-container" style="margin-bottom: 3em;">
+    <label>Angle</label><input id="cosine-law-angle" type="range" min="-80" max="80" step="0.01" data-color="#888">
+</div>
+
+<h2>The BRDF</h2>
+
+<p>The BRDF is the most important part of the rendering equation, it characterizes the surface of our material and its appearance. Like we saw in the rendering equation, it's a function of how much of the incoming light <span class="math" data="\omega_{i}"></span> is reflected to the outgoing direction <span class="math" data="\omega_{o}"></span> at point <span class="math" data="p"></span>.</p>
+
+<p>To be considered <strong>physically based</strong>, a BRDF must obey these rules:</p>
+
+<p><strong>Positivity:</strong></p>
+
+<div class="math math-centred" data="BRDF(\omega_{i}, \omega_{o}) \geq 0"></div>
+
+
+<p>The surface cannot reflect a negative amount of light.</p>
+
+<p><strong>Energy conservation:</strong></p>
+
+<div class="math math-centred" data="\forall \omega_{o}, \integral_{\Omega} BRDF(\omega_{i}, \omega_{o}) (n\dot\omega_{i}) d\omega_{i} \leq 1"></div>
+
+<p>This means that the reflected light towards any outgoing direction <span class="math" data="\omega_{o}"></span> cannot exceed the total incoming light from all directions <span class="math" data="\omega_{i}"></span>.</p>
+<p>Or in other words, the sum of all the weights we apply to incoming lights (the BRDF and the cosine term) cannot exceed one.</p>
+
+<p><strong>Helmholtz reciprocity:</strong></p>
+
+<div class="math math-centred" data="BRDF(\omega_{i}, \omega_{o}) = BRDF(\omega_{o}, \omega_{i})"></div>
+
+<p>Our BRDF must give the same value if we swap the incoming direction <span class="math" data="\omega_{i}"></span> and the outgoing direction <span class="math" data="\omega_{o}"></span>.</p>
+
+<p>There are many ways to model a BRDF that obeys these rules. One way is decompose the reflect light into a diffuse and a specular term:</p>
+
+<div class="math math-centred" data="BRDF(\omega_{i}, \omega_{o}, \alpha) = k_{diffuse} f_{diffuse} + k_{specular} f_{specular}"></div>
+<p>with:</p>
+<div class="math math-centred" data="k_{diffuse} + k_{specular} \leq 1"></div>
+<p>Here our BRDF is the sum of the diffuse and the specular components weighted by their respective coefficients <span class="math" data="k_{diffuse}"></span> and <span class="math" data="k_{specular}"></span>, with the surface roughness <span class="math" data="\alpha"></span> as a parameter.</p>
+<p>Now it's a question of choosing the right equations for the diffuse and specular components.</p>
+
+<h2>Diffuse Component</h2>
+
+<p>The simplest diffuse model is the <strong>Lambertian</strong> model. It assumes that light entering the material has scattered enough that when it exits, it reflects uniformly in all directions.</p>
+<p>The lambertian diffuse component is constant and depends on the diffuse color <span class="math" data="\rho"></span>, called <strong>albedo</strong>:</p>
+
+<div class="math math-centred" data="f_{lambert} = \frac{\rho}{\pi}"></div>
+
+<p>Another diffuse model is the <strong>Oren-Nayar</strong> model. Instead of assuming that light reflects uniformly, it depends on the incoming and outgoing light directions.</p>
+<p>It also takes as a parameter the roughness of the surface <span class="math" data="\alpha"></span> to simulate backscattering, which is light reflecting back to the incoming direction, and masking/shadowing, that we will discuss later.</p>
+
+<div class="math math-centred" data="f_{oren-nayar}(\sigma, \omega_i, \omega_o) = \frac{\rho}{\pi}\leftparenA + B max\leftparen 0, \frac{s}{t} \rightparen\rightparen"></div>
+<p>with:</p>
+<div class="math math-centred" data="A = 1 - \frac{1}{2} \frac{\sigma^2}{\sigma^2 + 0.33}"></div>
+<div class="math math-centred" data="B = 0.45 \frac{\sigma^2}{\sigma^2 + 0.09}"></div>
+<div class="math math-centred" data="s = (\omega_i \dot \omega_o) - (n \dot \omega_i)(n \dot \omega_o)"></div>
+<div class="math math-centred" data="t = (s > 0) ? max(n \dot \omega_i, n \dot \omega_o) : 1"></div>
+
+<p>Here we can see both diffuse models, multiplied by the cosine term <span class="math" data="n\dot\omega"></span>. Notice that at <button class="button-inline" id="diffuse_roughness_zero">zero roughness</button>, the Oren-Nayar model becomes identical to the Lambertian one:</p>
+<br>
+<div class="canvas" id="scene_diffuse">
+    <div class="scene-mesh-toggle" data-mesh-target="scene_diffuse" aria-label="Diffuse mesh selector">
+        <button type="button" class="scene-mesh-toggle-button active" data-mesh-kind="sphere" aria-label="Show sphere">
+            <span class="scene-mesh-toggle-circle" aria-hidden="true"></span>
+        </button>
+        <button type="button" class="scene-mesh-toggle-button" data-mesh-kind="bunny" aria-label="Show bunny">
+            <span class="scene-mesh-toggle-bunny" aria-hidden="true"></span>
+        </button>
+    </div>
+</div>
+<div id="scene-diffuse-labels" style="display: flex; align-items: center; font-weight: bold; margin-top: 0.75em;">
+</div>
+
+<br>
+<div class="slider-container" style="margin-bottom: 3em;">
+    <label>Roughness</label><input id="roughness-input-oren-nayar" type="range" min="0" max="1" step="0.01" data-color="#888">
+</div>
+
+<h2>Specular Component</h2>
+
+<p>The most widely used model for specular reflection is the <strong>Cook-Torrance</strong> BRDF.</p>
+
+<p>It has three components, divided by a normalization term, they are: the normal distribution function <span class="math" data="D"></span>, the geometric function <span class="math" data="G"></span> and the Fresnel equation <span class="math" data="F"></span>.</p>
+
+<div class="math math-centred" data="f_{cook-torrance} = \frac{D F G}{4 (n\dot\omega_{i}) (n\dot\omega_{o})}"></div>
+
+<h2>Normal Distribution Function</h2>
+
+<p>The normal distribution function is an approximation of the number of microfacets oriented in such a way that they will reflect light from the incoming direction <span class="math" data="\omega_{i}"></span> to the outgoing direction <span class="math" data="\omega_{o}"></span>.</p>
+
+<p>The one we will use is the <strong>Trowbridge-Reitz GGX</strong> function:</p>
+
+<div class="math math-centred" data="D_{ggxtr}(n, \omega_{h}, \alpha) = \frac{\alpha^{2}}{\pi ((n\dot\omega_{h})^{2} (\alpha^{2} - 1) + 1)^{2}}"></div>
+
+<p><span class="math" data="\omega_{h}"></span> is the halfway vector between the incoming and outgoing directions, we calculate it like this:</p>
+
+<div class="math math-centred" data="\omega_{h} = \frac{\omega_{i} + \omega_{o}}{|\omega_{i} + \omega_{o}|}"></div>
+
+<div class="canvas" id="scene_normal_distribution_function">
+    <div class="scene-mesh-toggle" data-mesh-target="scene_normal_distribution_function" aria-label="Normal distribution mesh selector">
+        <button type="button" class="scene-mesh-toggle-button active" data-mesh-kind="sphere" aria-label="Show sphere">
+            <span class="scene-mesh-toggle-circle" aria-hidden="true"></span>
+        </button>
+        <button type="button" class="scene-mesh-toggle-button" data-mesh-kind="bunny" aria-label="Show bunny">
+            <span class="scene-mesh-toggle-bunny" aria-hidden="true"></span>
+        </button>
+    </div>
+</div>
+<div class="slider-container" style="margin-bottom: 3em;">
+    <label>Roughness</label><input id="roughness-input-normal-distribution" type="range" min="0" max="1" step="0.01" data-color="#888">
+</div>
+
+<h2>Geometric Function</h2>
+
+<p>Some incoming rays get occluded by some microfacets before they get a chance to bounce off to the outgoing direction, this is called <strong>shadowing</strong>. Other rays get occluded by microfacets on their way to the outgoing direction, this is called <strong>masking</strong>. The geometric function approximates this effect.</p>
+
+<p>Here we can see the <strong class="red">shadowed</strong> rays in <strong class="red">red</strong> and the <strong class="blue">masked</strong> rays in <strong class="blue">blue</strong>. The <strong class="golden">yellow</strong> rays succesfully reflected to the outgoing direction:</p>
+<div class="canvas" id="scene_roughness_geometric_function"></div>
+<div class="slider-container" style="margin-bottom: 3em;">
+    <label>Angle</label><input id="angle-input-geometric-function" type="range" min="-140" max="-100" step="0.01" data-color="#888">
+</div>
+
+<p>We will use the Schlick-GGX geometric function:</p>
+
+<div class="math math-centred" data="G_{ggx}(n, \omega_{i}, \omega_{o}, k) = \class{bold red}{G_{shadowing}} * \class{bold blue}{G_{masking}}"></div>
+<div class="math math-centred" data="G_{ggx}(n, \omega_{i}, \omega_{o},k) = \class{bold red}{G(n, \omega_{i}, k)} * \class{bold blue}{G(n, \omega_{o}, k)}"></div>
+<div class="math math-centred" data="G(n, \omega, k) = \frac{n\dot\omega}{n\dot\omega * (1 - k) + k}"></div>
+<p>Where:</p>
+<div class="math math-centred" data="k = \frac{(\alpha + 1)^{2}}{8}"></div>
+
+<div class="canvas" id="scene_geometric_function">
+    <div class="scene-mesh-toggle" data-mesh-target="scene_geometric_function" aria-label="Geometric function mesh selector">
+        <button type="button" class="scene-mesh-toggle-button active" data-mesh-kind="sphere" aria-label="Show sphere">
+            <span class="scene-mesh-toggle-circle" aria-hidden="true"></span>
+        </button>
+        <button type="button" class="scene-mesh-toggle-button" data-mesh-kind="bunny" aria-label="Show bunny">
+            <span class="scene-mesh-toggle-bunny" aria-hidden="true"></span>
+        </button>
+    </div>
+</div>
+<div class="slider-container" style="margin-bottom: 3em;">
+    <label>Roughness</label><input id="roughness-input-geometric-function" type="range" min="0" max="1" step="0.01" data-color="#888">
+</div>
+
+<h2>Fresnel Equation</h2>
+
+<p>Like we discussed in the previous chapter, we will use the Fresnel-Schlick approximation which is fast for realtime rendering and accurate enough:</p>
+<div class="math math-centred" data="F_{schlick}(cos\theta, F_{0}) = F_{0} + (1 - F_{0}) * (1 - cos\theta)^{5}"></div>
+
+<div class="canvas" id="scene_fresnel_equation">
+    <div class="scene-mesh-toggle" data-mesh-target="scene_fresnel_equation" aria-label="Fresnel mesh selector">
+        <button type="button" class="scene-mesh-toggle-button" data-mesh-kind="sphere" aria-label="Show sphere">
+            <span class="scene-mesh-toggle-circle" aria-hidden="true"></span>
+        </button>
+        <button type="button" class="scene-mesh-toggle-button active" data-mesh-kind="bunny" aria-label="Show bunny">
+            <span class="scene-mesh-toggle-bunny" aria-hidden="true"></span>
+        </button>
+    </div>
+</div>
+<div class="slider-container" style="margin-bottom: 3em;">
+    <label>Base reflectance F<sub>0</sub></label><input id="base-reflectance-input" type="range" min="0" max="1" step="0.01" data-color="#888">
+</div>
+
+<h2>Combining everything</h2>
+
+<p>Now we need to combine the diffuse and specular components to get our final PBR render.</p>
+
+<p>First we need the base reflectance of the material. One good approximation is to consider that the average dielectric has an index of refraction of 1.5, and by using the Fresnel equation at normal incidence for the refraction between air and the dielectric we get:</p>
+
+<div class="math math-centred" data="F_{0} = \leftparen\frac{1 - 1.5}{1 + 1.5}\rightparen^{2} = 0.04"></div> 
+
+<p>Then we have metals that have a colored specular reflection, so we get the base reflectance by interpolating between 0.04 and the albedo using the metallic variable:</p>
+
+<div class="math math-centred" data="F_{0} = mix(0.04, albedo, metallic)"></div> 
+
+<p>The specular coefficient corresponds to how much light is reflected rather than refracted, we use the Fresnel equation to get that:</p>
+<div class="math math-centred" data="k_{specular} = F_{schlick}(\omega_{i}, F_{0})"></div> 
+<p>The diffuse coefficient is the light that isn't reflected (since diffuse reflections come from subsurface scattering). We also need to consider the fact that metals do not have diffuse reflections:</p>
+<div class="math math-centred" data="k_{diffuse} = (1 - k_{specular}) (1 - metallic)"></div> 
+
+<p>Combining everything we get our BRDF:</p>
+<div class="math math-centred" data="BRDF = k_{diffuse} \frac{albedo}{\pi} + \frac{D F G}{4 (n\dot\omega_{i}) (n\dot\omega_{o})}"></div> 
+
+<p>To get the final pixel color, we multiply the BRDF by the incoming light and the cosine factor:</p>
+<div class="math math-centred" data="L_{o} = BRDF L_{i} (n\dot\omega_{i})"></div> 
+
+    <div class="canvas" id="scene_pbr_demo">
+        <div class="scene-mesh-toggle" data-mesh-target="scene_pbr_demo" aria-label="PBR demo mesh selector">
+            <button type="button" class="scene-mesh-toggle-button active" data-mesh-kind="sphere" aria-label="Show sphere">
+                <span class="scene-mesh-toggle-circle" aria-hidden="true"></span>
+            </button>
+            <button type="button" class="scene-mesh-toggle-button" data-mesh-kind="bunny" aria-label="Show bunny">
+                <span class="scene-mesh-toggle-bunny" aria-hidden="true"></span>
+            </button>
+        </div>
+    </div>
+<div class="slider-container" style="margin-bottom: 3em;">
+    <label>Roughness</label><input id="roughness-input-pbr-demo" type="range" min="0" max="1" step="0.01" data-color="#888">
+    <label>Metallic</label><input id="metallic-input-pbr-demo" type="range" min="0" max="1" step="0.01" data-color="#888">
+    <label>Albedo</label><input id="albedo-input-pbr-demo" type="color" data-color="#888">
+</div>
+
+<p>Here is a grid of spheres with different roughness and metallic values on each axis:</p>
+<div class="canvas" id="scene_pbr_demo_grid">
+    <div class="scene-mesh-toggle" data-mesh-target="scene_pbr_demo_grid" aria-label="PBR grid mesh selector">
+        <button type="button" class="scene-mesh-toggle-button active" data-mesh-kind="sphere" aria-label="Show sphere">
+            <span class="scene-mesh-toggle-circle" aria-hidden="true"></span>
+        </button>
+        <button type="button" class="scene-mesh-toggle-button" data-mesh-kind="bunny" aria-label="Show bunny">
+            <span class="scene-mesh-toggle-bunny" aria-hidden="true"></span>
+        </button>
+    </div>
+</div>
+
+<p>Usually the metallic values is either 0 or 1, but it is useful in PBR rendering to consider intermediate values to smoothly interpolate between metals and non-metals. Take this rusted metal material for example:</p>
+<div class="canvas" id="scene_rusted_metal"></div>
+<!--
+<h1>To be continued...</h1>
+
+<p>Physically based rendering is a very vast topic and there is a lot more to cover.</p>
+<p>In the chapter about the physics of light, I omitted the quantum explanation of light's behaviour using probability amplitudes. We didn't talk about the double slit experiment or the wave-particle duality. I may cover this in the future when I learn more about it, for now I'll leave you with this quote from Richard Feynman's QED book:
+<blockquote>The theory of quantum electrodynamics describes Nature as absurd from the point of view of common sense. And it agrees fully with experiment. So I hope you accept Nature as She is — absurd.</blockquote>
+</p>
+
+<p>We didn't talk about polarization and assumed all our light sources are unpolarized, this isn't very important for general rendering but can be useful for <a href="https://mitsuba.readthedocs.io/en/stable/src/rendering/polarized_rendering.html">research</a>.</p>
+
+<p>We focused on surface rendering, in the future I will cover volume rendering, subsurface scattering, effects like optical dispersion, thin-film interference/iridescence...etc</p>
+
+<p>There are a lot more implementation specific details. Whether we are implementing PBR in raytracing or rasterization, we need to use optimization techniques to make the rendering faster while still being accurate. Examples that come to mind are prefiltred envmaps and importance sampling (or efficient sampling in general).</p>
+-->
+<h1>Further reading</h1>
+<p>This article is mainly based on <a href="https://www.youtube.com/watch?v=j-A0mwsJRmk">this SIGGRAPH talk</a> by Naty Hoffman and <a href="https://www.pbr-book.org/">Physically Based Rendering: From Theory To Implementation</a></p>
+<p>My main inspiration for writing interactive articles is this <a href="https://ciechanow.ski/">fantastic blog</a> by Bartosz Ciechanowski. A lot of interactive demos in this article are similar to the ones in <a href="https://ciechanow.ski/cameras-and-lenses/">this post</a>.</p>
+<p>Other resources include <a href="https://learnopengl.com/PBR/Theory">LearnOpenGL</a>, the <a href="https://www.youtube.com/watch?v=XoVW7CRR5JY">ScienceClic</a> youtube channel, and <a href="https://www.youtube.com/watch?v=aXRTczANuIs">3Blue1Brown</a> of course.</p>
+<p>I can't recommend enough the famous book <a href="https://en.wikipedia.org/wiki/QED:_The_Strange_Theory_of_Light_and_Matter">QED: The Strange Theory of Light and Matter</a> by Richard Feynman.</p>
+
+<div id="comments" data-page="pbr"></div>
+<script type="text/javascript">
+(function() {
+    const commentsDiv = document.getElementById("comments");
+    const postSlug = commentsDiv.getAttribute("data-page");
+
+    commentsDiv.outerHTML = `
+        <h1>Comments</h1>
+        <style type="text/css">
+            #form *{
+                font-family: "inter";
+            }
+            #form{
+                margin-top: 2em;
+                display: flex;
+                flex-direction: column;
+                gap: 9px;
+            }
+            #form input, #form textarea, #form button{
+                font-size: 1em;
+                border: 1px solid #333333;
+                background-color: white;
+                color: #333333;
+                line-height: 1.5;
+                padding: 6px 8px;
+            }
+            #form textarea{
+                height: 6em;
+            }
+            #form button{
+                width: 9em;
+                padding: 3px 6px;
+            }
+            #comments-area{
+                margin-top: 2em;
+            }
+            .comment{
+                border-left: 1px solid #333333;
+                padding-left: 1em;
+                margin-top: 1.5em;
+            }
+            .comment-name{
+                font-weight: bold;
+            }
+            .comment-info{
+                display: flex;
+                gap: 1em;
+                padding-bottom: 0.5em;
+            }
+            .comment-datetime{
+                color: #333333;
+            }
+            .comment.pending {
+                opacity: 0.5;
+            }
+        </style>
+        <div id="comments-area"></div>
+        <form id="form">
+            <input id="name" placeholder="Name" required />
+            <textarea id="comment" placeholder="Comment" required></textarea>
+            <button>Post</button>
+        </form>
+    `;
+
+    const script = document.createElement("script");
+    script.src = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2";
+    script.onload = function() {
+        const clientId = localStorage.getItem("comment_client_id") || crypto.randomUUID();
+        localStorage.setItem("comment_client_id", clientId);
+        const sb = window.supabase.createClient(
+            "https://ncuqrrhckzsxiparjbcc.supabase.co",
+            "sb_publishable_C_ebFmG7_UsFlHoO-cHWQQ_iqrfzntQ",
+            { global: { headers: { "client_id": clientId } } }
+        );
+        const form = document.getElementById("form");
+        const commentsArea = document.getElementById("comments-area");
+        form.onsubmit = async (e) => {
+            e.preventDefault();
+            await sb.from("comments").insert([{
+                post_slug: postSlug,
+                name: form.querySelector("#name").value,
+                comment: form.querySelector("#comment").value,
+                client_id: clientId
+            }]);
+            form.reset();
+            await load();
+        };
+        function escapeHtml(text) {
+            const div = document.createElement("div");
+            div.innerText = text;
+            return div.innerHTML;
+        }
+        async function load() {
+            const { data } = await sb
+            .from("comments")
+            .select("*")
+            .eq("post_slug", postSlug)
+            .order("created_at", { ascending: false });
+            commentsArea.innerHTML = data.map(c => {
+                const date = new Date(c.created_at);
+                const formatted =
+                    date.getFullYear() + "-" +
+                    String(date.getMonth() + 1).padStart(2, "0") + "-" +
+                    String(date.getDate()).padStart(2, "0") + " " +
+                    String(date.getHours()).padStart(2, "0") + ":" +
+                    String(date.getMinutes()).padStart(2, "0") + ":" +
+                    String(date.getSeconds()).padStart(2, "0");
+                const pending = !c.approved;
+                return `
+                    <div class="comment ${pending ? 'pending' : ''}">
+                        <div class="comment-info">
+                            <div class="comment-name">
+                            ${escapeHtml(c.name)}
+                            ${pending ? '<span class="pending-label"> (awaiting approval)</span>' : ''}
+                            </div>
+                            <div class="comment-datetime">${formatted}</div>
+                        </div>
+                        <div class="comment-text">${escapeHtml(c.comment)}</div>
+                    </div>
+                `;
+            }).join("");
+        }
+        load();
+    };
+    document.head.appendChild(script);
+})();
+</script>
+
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+
+<script type="text/javascript" src="jszip.min.js"></script>
+<script type="text/javascript" src="../js/math.js"></script>
+<script type="text/javascript" src="mathdisp.js"></script>
+<script type="text/javascript" src="main.js"></script>
+</body>
+</html>

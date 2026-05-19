@@ -1,0 +1,6 @@
+[submodule "japanese-learning"]
+	path = japanese-learning
+	url = git@github.com:imadr/japanese-learning.git
+[submodule "quiz.git"]
+	path = quiz
+	url = https://github.com/imadr/quiz.git

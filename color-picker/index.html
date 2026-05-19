@@ -1,0 +1,703 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="shortcut icon" href="#">
+    <title>Color Picker</title>
+    <style type="text/css">
+        body{
+            margin: 0;
+            padding: 0;
+            font-family: monospace;
+            text-align: center;
+            padding-top: 1vh;
+        }
+        table{
+            margin-right: auto;
+            margin-left: auto;
+        }
+        td:first-child{
+            text-align: left;
+        }
+        td:nth-child(1){
+            width: 17vw;
+        }
+        td:nth-child(2){
+            width: 22vw;
+        }
+        input[type=text]{
+            font-family: monospace;
+            width: 100% !important;
+        }
+        .decimals_{
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            align-content: center;
+        }
+        .decimals_ input{
+            flex: 2;
+            vertical-align: text-bottom;
+            margin-left: 11px;
+        }
+        .decimals_ label{
+            line-height: 1.8;
+        }
+        .copy_icon{
+            padding-left: 8px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+<canvas id="canvas_"></canvas>
+<table>
+<tr>
+    <td><label for="rgb_hex" id="rgb_hex_label">rgb hex:</label></td>
+    <td><input type="text" id="rgb_hex"></td>
+    <td class="copy_icon"></td>
+</tr>
+<tr>
+    <td><label for="rgb_uint" id="rgb_uint_label">rgb (uint, uint, uint):</label></td>
+    <td><input type="text" id="rgb_uint"></td>
+    <td class="copy_icon"></td>
+</tr>
+<tr>
+    <td><label for="rgb_float" id="rgb_float_label">rgb (float, float, float):</label></td>
+    <td><input type="text" id="rgb_float"></td>
+    <td class="copy_icon"></td>
+</tr>
+<tr>
+    <td><label for="hsv_">hsv (deg, %, %):</label></td>
+    <td><input type="text" id="hsv_"></td>
+    <td class="copy_icon"></td>
+</tr>
+<tr>
+    <td><label for="hsv_float">hsv (float, float, float):</label></td>
+    <td><input type="text" id="hsv_float"></td>
+    <td class="copy_icon"></td>
+</tr>
+<tr>
+    <td><label for="hsl_">hsl (deg, %, %):</label></td>
+    <td><input type="text" id="hsl_"></td>
+    <td class="copy_icon"></td>
+</tr>
+<tr>
+    <td><label for="hsl_float">hsl (float, float, float):</label></td>
+    <td><input type="text" id="hsl_float"></td>
+    <td class="copy_icon"></td>
+</tr>
+<tr>
+    <td colspan="2">
+        <div class="decimals_">
+        <label for="decimals">decimal places</label>
+        <input type="range" id="decimals" value="3" min="0" max="10">
+        </div>
+    </td>
+</tr>
+</table>
+
+<label for="hsv_picker_radio">hsv picker</label> <input name="picker_type" type="radio" id="hsv_picker_radio" checked>
+<label for="hsl_picker_radio">hsl picker</label> <input name="picker_type" type="radio" id="hsl_picker_radio">
+<script src="../js/math.js"></script>
+<script>
+let copy_svg_icon = `<svg height="24" width="24" viewBox="0 0 48 48" version="1.1" id="svg4" xmlns="http://www.w3.org/2000/svg" xmlns:svg="http://www.w3.org/2000/svg"> <defs id="defs8" /> <path d="M12 37.95v-34h28v34Zm3-3h22v-28H15Zm-9 9V10.8h3v30.15h23.7v3Zm9-9v-28 28Z" id="path2"/></svg>`;
+let current_color = {
+    rgb: [1, 0, 0],
+    hue: 0,
+    saturation: 1,
+    alpha: 1,
+};
+
+let canvas = document.getElementById("canvas_");
+let ctx = document.getElementById("canvas_").getContext("2d");
+let picker_type = "hsv";
+let color_width = 200;
+let margin_right = 25;
+let bar_width = 14;
+let checker_size = 2;
+let padding = 30;
+let cursor_size = 10;
+let color_cursor_dragging = false;
+let color_cursor = [0, 0];
+let cursors = {
+    "hue" : { value: 0, grabbing: false },
+    "alpha" : { value: 0, grabbing: false },
+};
+let decimals = parseInt(document.getElementById("decimals").value);
+
+setup_copy();
+set_current_color(current_color);
+
+function setup_copy(){
+    let buttons = document.getElementsByClassName("copy_icon");
+    for(let button of buttons){
+        let svg = document.createElement("span");
+        svg.innerHTML = copy_svg_icon;
+        button.appendChild(svg);
+        (function(){
+            svg.onclick = function(){
+                if(navigator.clipboard !== undefined){
+                    navigator.clipboard.writeText(this.parentNode.parentNode.getElementsByTagName("input")[0].value);
+                }
+            }
+        })();
+    }
+}
+
+function draw(){
+    let picker_buffer = generate_picker_buffer();
+    ctx.putImageData(picker_buffer, 0, 0);
+    draw_color_cursor();
+    draw_cursors();
+}
+
+function regenerate_color(){
+    let color = {};
+    color.alpha = 1-cursors["alpha"].value/color_width;
+    if(picker_type == "hsv"){
+        let current_color_hsv = [cursors["hue"].value/color_width, color_cursor[0]/color_width, 1-color_cursor[1]/color_width];
+        color.rgb = hsv_to_rgb(current_color_hsv);
+        color.hue = current_color_hsv[0];
+        color.saturation = current_color_hsv[1];
+    }
+    else if(picker_type == "hsl"){
+        let current_color_hsl = [cursors["hue"].value/color_width, color_cursor[0]/color_width, 1-color_cursor[1]/color_width];
+        color.rgb = hsl_to_rgb(current_color_hsl);
+        color.hue = current_color_hsl[0];
+        color.saturation = current_color_hsl[1];
+    }
+    set_current_color(color);
+}
+
+function to_rgb_str(color){
+    return "rgb("+Math.floor(color[0]*255)+", "+Math.floor(color[1]*255)+", "+Math.floor(color[2]*255)+")";
+}
+
+function draw_color_cursor(){
+    let x = color_cursor[0]+padding;
+    let y = color_cursor[1]+padding;
+    ctx.beginPath();
+    ctx.arc(x, y, cursor_size, 0, 2*Math.PI);
+    ctx.fillStyle = to_rgb_str(current_color.rgb);
+    ctx.strokeStyle = "#aaaaaaee";
+    ctx.lineWidth = 2;
+    ctx.fill();
+    ctx.stroke();
+}
+
+function draw_cursors(){
+    let start = padding+color_width+margin_right+bar_width/2;
+    for(const [picker, cursor] of Object.entries(cursors)){
+        ctx.beginPath();
+        ctx.arc(start, padding+cursor.value, cursor_size, 0, 2*Math.PI);
+        if(picker == "hue"){
+            ctx.fillStyle = to_rgb_str(hsv_to_rgb([current_color.hue, 1, 1]));
+        }
+        else if(picker == "alpha"){
+            ctx.fillStyle = to_rgb_str(current_color.rgb);
+        }
+        ctx.strokeStyle = "#aaaaaaee";
+        ctx.lineWidth = 2;
+        ctx.fill();
+        ctx.stroke();
+        start += margin_right+bar_width;
+    }
+}
+
+function check_cursor(x, y){
+    if(distance([x, y], [color_cursor[0]+padding, color_cursor[1]+padding]) < cursor_size){
+        document.body.style.cursor = "pointer";
+    }
+    else{
+        document.body.style.cursor = "default";
+    }
+}
+
+function remap(origFrom, origTo, targetFrom, targetTo, value){
+  let rel = invLerp(origFrom, origTo, value);
+  return lerp(targetFrom, targetTo, rel);
+}
+
+function invLerp(from, to, value){
+  return (value - from) / (to - from);
+}
+
+function lerp(from, to, rel){
+  return ((1 - rel) * from) + (rel * to);
+}
+
+function generate_picker_buffer(){
+    canvas.width = (margin_right+bar_width)*Object.keys(cursors).length+color_width+padding*2;
+    canvas.height = color_width+padding*2;
+
+    let d = ctx.createImageData(canvas.width, canvas.height);
+
+    for(let y = padding; y <= color_width+padding; y++){
+        let local_y = (y-padding)/color_width;
+        for(let x = padding; x <= padding+color_width; x++){
+            let index = y*canvas.width+x;
+            index *= 4;
+            let local_x = (x-padding)/color_width;
+            let rgb;
+            if(picker_type == "hsv"){
+                rgb = hsv_to_rgb([current_color.hue, local_x, 1-local_y]);
+            }
+            else{
+                rgb = hsl_to_rgb([current_color.hue, local_x, 1-local_y]);
+            }
+            d.data[index]   = rgb[0]*255;
+            d.data[index+1] = rgb[1]*255;
+            d.data[index+2] = rgb[2]*255;
+            d.data[index+3] = 255;
+        }
+    }
+
+    let picker_start = padding+color_width+margin_right;
+    let ratio = color_width/bar_width;
+
+    for(const [picker, cursor] of Object.entries(cursors)){
+        for(let y = padding; y <= color_width+padding; y++){
+            let local_y = (y-padding)/color_width;
+            let hsv = [local_y, 1, 1];
+            if(picker == "hue"){
+                hsv = [local_y, 1, 1];
+            }
+            else if(picker == "alpha"){
+                hsv = rgb_to_hsv(current_color.rgb);
+            }
+            let alpha = picker == "alpha" ? (1-local_y) : 1;
+
+            for(let x = picker_start; x < picker_start+bar_width; x++){
+                let rgb = hsv_to_rgb(hsv);
+                let local_x = remap(picker_start, picker_start+bar_width, 0, 1, x);
+                if(picker == "alpha"){
+                    let checker = (Math.floor(checker_size*local_x)
+                                     +Math.floor(checker_size*local_y*ratio))%2;
+                    checker = Math.min(Math.max(Math.sign(checker), 0.0)+0.8, 1);
+                    rgb[0] = (1-alpha)*checker + alpha*rgb[0];
+                    rgb[1] = (1-alpha)*checker + alpha*rgb[1];
+                    rgb[2] = (1-alpha)*checker + alpha*rgb[2];
+                }
+                let index = y*canvas.width+x;
+                index *= 4;
+                d.data[index]   = rgb[0]*255;
+                d.data[index+1] = rgb[1]*255;
+                d.data[index+2] = rgb[2]*255;
+                d.data[index+3] = 255;
+            }
+        }
+        picker_start += bar_width+margin_right;
+    }
+    return d;
+}
+
+function rgb_to_hsl(rgb){
+    let r = rgb[0];
+    let g = rgb[1];
+    let b = rgb[2];
+    let max = Math.max(r, g, b);
+    let min = Math.min(r, g, b);
+    let c = max-min;
+
+    let h;
+    if(c == 0){
+        h = 0;
+    }
+    else if(max == r){
+        h = (g-b)/c;
+        h += (h < 0 ? 6 : 0);
+    }
+    else if(max == g){
+        h = ((b-r)/c)+2;
+    }
+    else if(max == b){
+        h = ((r-g)/c)+4;
+    }
+    let l = (max+min)/2;
+    let s = 0;
+    if(l != 1 && l != 0){
+        s = c/(1-Math.abs(2*l-1));
+    }
+    h /= 6;
+    return [h, s, l];
+}
+
+function hsl_to_rgb(hsl){
+    let h = hsl[0];
+    let s = hsl[1];
+    let l = hsl[2];
+    let c = (1-Math.abs(2*l-1))*s;
+    h *= 6;
+    let x = c*(1-Math.abs(h%2-1));
+    let r, g, b;
+    if(h < 1){
+        r = c;
+        g = x;
+        b = 0;
+    }
+    else if(h >= 1 && h < 2){
+        r = x;
+        g = c;
+        b = 0;
+    }
+    else if(h >= 2 && h < 3){
+        r = 0;
+        g = c;
+        b = x;
+    }
+    else if(h >= 3 && h < 4){
+        r = 0;
+        g = x;
+        b = c;
+    }
+    else if(h >= 4 && h < 5){
+        r = x;
+        g = 0;
+        b = c;
+    }
+    else if(h >= 5 && h <= 6){
+        r = c;
+        g = 0;
+        b = x;
+    }
+    let m = l-c/2;
+    return [r+m, g+m, b+m];
+}
+
+function rgb_to_hsv(rgb){
+    let r = rgb[0];
+    let g = rgb[1];
+    let b = rgb[2];
+    let max = Math.max(r, g, b);
+    let min = Math.min(r, g, b);
+    let c = max-min;
+
+    let h;
+    if(c == 0){
+        h = 0;
+    }
+    else if(max == r){
+        h = (g-b)/c;
+        h += (h < 0 ? 6 : 0);
+    }
+    else if(max == g){
+        h = ((b-r)/c)+2;
+    }
+    else if(max == b){
+        h = ((r-g)/c)+4;
+    }
+    let v = Math.max(r, Math.max(g, b));
+    let s = 0;
+    if(v != 0){
+        s = c/v;
+    }
+    h /= 6;
+    return [h, s, v];
+}
+
+function hsv_to_rgb(hsv){
+    let h = hsv[0];
+    let s = hsv[1];
+    let v = hsv[2];
+    let c = v*s;
+    h *= 6;
+    let x = c*(1-Math.abs(h%2-1));
+    let r, g, b;
+    if(h < 1){
+        r = c;
+        g = x;
+        b = 0;
+    }
+    else if(h >= 1 && h < 2){
+        r = x;
+        g = c;
+        b = 0;
+    }
+    else if(h >= 2 && h < 3){
+        r = 0;
+        g = c;
+        b = x;
+    }
+    else if(h >= 3 && h < 4){
+        r = 0;
+        g = x;
+        b = c;
+    }
+    else if(h >= 4 && h < 5){
+        r = x;
+        g = 0;
+        b = c;
+    }
+    else if(h >= 5 && h <= 6){
+        r = c;
+        g = 0;
+        b = x;
+    }
+    let m = v-c;
+    return [r+m, g+m, b+m];
+}
+
+function col_to_hex(col){
+    return "#"+
+        ("00"+Math.floor(col.rgb[0]*255).toString(16)).slice(-2)+
+        ("00"+Math.floor(col.rgb[1]*255).toString(16)).slice(-2)+
+        ("00"+Math.floor(col.rgb[2]*255).toString(16)).slice(-2)+
+        (col.alpha < 1 ? ("00"+Math.floor(col.alpha*255).toString(16)).slice(-2) : "");
+}
+
+function col_to_uint(col){
+    return Math.floor(current_color.rgb[0]*255)+", "+
+           Math.floor(current_color.rgb[1]*255)+", "+
+           Math.floor(current_color.rgb[2]*255)+
+           (col.alpha < 1 ? (", "+Math.floor(current_color.alpha*255)) : "");
+}
+
+function col_to_float(col){
+    return (current_color.rgb[0]).toFixed(decimals)+", "+
+           (current_color.rgb[1]).toFixed(decimals)+", "+
+           (current_color.rgb[2]).toFixed(decimals)+
+           (col.alpha < 1 ? (", "+(current_color.alpha).toFixed(decimals)) : "");
+}
+
+function set_current_color(color){
+    current_color.rgb = color.rgb;
+    current_color.hue = color.hue;
+    current_color.saturation = color.saturation;
+    current_color.alpha = color.alpha;
+
+    document.getElementById("rgb_hex_label").innerHTML = current_color.alpha < 1 ? "rgba hex:" : "rgb hex:";
+    document.getElementById("rgb_uint_label").innerHTML = current_color.alpha < 1 ?
+                                                        "rgba (uint, uint, uint, uint):" : "rgb hex (uint, uint, uint):";
+
+    document.getElementById("rgb_hex").value = col_to_hex(current_color);
+    document.getElementById("rgb_uint").value = col_to_uint(current_color);
+    document.getElementById("rgb_float").value = col_to_float(current_color);
+    let hsv = rgb_to_hsv(current_color.rgb);
+    let hsl = rgb_to_hsl(current_color.rgb);
+    document.getElementById("hsv_").value = (hsv[0]*360).toFixed(decimals)+", "+(hsv[1]*100).toFixed(decimals)+", "+(hsv[2]*100).toFixed(decimals);
+    document.getElementById("hsv_float").value = (hsv[0]).toFixed(decimals)+", "+(hsv[1]).toFixed(decimals)+", "+(hsv[2]).toFixed(decimals);
+    document.getElementById("hsl_").value = (hsl[0]*360).toFixed(decimals)+", "+(hsl[1]*100).toFixed(decimals)+", "+(hsl[2]*100).toFixed(decimals);
+    document.getElementById("hsl_float").value = (hsl[0]).toFixed(decimals)+", "+(hsl[1]).toFixed(decimals)+", "+(hsl[2]).toFixed(decimals);
+    regenerate_cursors();
+    draw();
+}
+
+document.getElementById("decimals").addEventListener("input", function(e){
+    decimals = parseInt(this.value);
+    set_current_color(current_color);
+});
+
+document.getElementById("rgb_hex").addEventListener("input", function(e){
+    let rgb = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(this.value);
+    let rgba = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(this.value);
+    let col;
+    if(rgb){
+        let col = [
+            parseInt(rgb[1], 16),
+            parseInt(rgb[2], 16),
+            parseInt(rgb[3], 16),
+            ].map(function(x){
+                x = clamp(parseFloat(x)/255, 0, 1);
+                if(isNaN(x)) x = 0;
+                return x;
+            });
+        let hsv = rgb_to_hsv(col);
+        set_current_color({rgb: col, hue: hsv[0], saturation: hsv[1]});
+    }
+    else if(rgba){
+        let col = [
+            parseInt(rgba[1], 16),
+            parseInt(rgba[2], 16),
+            parseInt(rgba[3], 16),
+            parseInt(rgba[4], 16),
+            ].map(function(x){
+                x = clamp(parseFloat(x)/255, 0, 1);
+                if(isNaN(x)) x = 0;
+                return x;
+            });
+        let hsv = rgb_to_hsv(col.slice(0, 3));
+        set_current_color({rgb: col.slice(0, 3), hue: hsv[0], saturation: hsv[1], alpha: col[3]});
+    }
+});
+
+document.getElementById("rgb_uint").addEventListener("input", function(e){
+    let col = this.value.split(",").map(function(x){
+        x = clamp(parseFloat(x)/255, 0, 1);
+        if(isNaN(x)) x = 0;
+        return x;
+    });
+    if(col.length == 3){
+        let hsv = rgb_to_hsv(col);
+        set_current_color({rgb: col, hue: hsv[0], saturation: hsv[1]});
+    }
+    else if(col.length == 4){
+        let hsv = rgb_to_hsv(col.slice(0, 3));
+        set_current_color({rgb: col.slice(0, 3), hue: hsv[0], saturation: hsv[1], alpha: col[3]});
+    }
+});
+
+document.getElementById("rgb_float").addEventListener("input", function(e){
+    let col = this.value.split(",").map(function(x){
+        x = clamp(parseFloat(x), 0, 1);
+        if(isNaN(x)) x = 0;
+        return x;
+    });
+
+    if(col.length == 3){
+        let hsv = rgb_to_hsv(col);
+        set_current_color({rgb: col, hue: hsv[0], saturation: hsv[1]});
+    }
+    else if(col.length == 4){
+        let hsv = rgb_to_hsv(col.slice(0, 3));
+        set_current_color({rgb: col.slice(0, 3), hue: hsv[0], saturation: hsv[1], alpha: col[3]});
+    }
+});
+
+document.getElementById("hsv_").addEventListener("input", function(e){
+    let col = this.value.split(",").map(function(x, i){
+        let div = 100;
+        if(i == 0) div = 360;
+        x = clamp(parseFloat(x/div), 0, 1);
+        if(isNaN(x)) x = 0;
+        return x;
+    });
+    while(col.length < 3){
+        col.push(0);
+    }
+    set_current_color({rgb: hsv_to_rgb(col), hue: col[0], saturation: col[1]});
+});
+
+document.getElementById("hsv_float").addEventListener("input", function(e){
+    let col = this.value.split(",").map(function(x, i){
+        x = clamp(parseFloat(x), 0, 1);
+        if(isNaN(x)) x = 0;
+        return x;
+    });
+    while(col.length < 3){
+        col.push(0);
+    }
+    set_current_color({rgb: hsv_to_rgb(col), hue: col[0], saturation: col[1]});
+});
+
+document.getElementById("hsl_").addEventListener("input", function(e){
+    let col = this.value.split(",").map(function(x, i){
+        let div = 100;
+        if(i == 0) div = 360;
+        x = clamp(parseFloat(x/div), 0, 1);
+        if(isNaN(x)) x = 0;
+        return x;
+    });
+    while(col.length < 3){
+        col.push(0);
+    }
+    set_current_color({rgb: hsl_to_rgb(col), hue: col[0], saturation: col[1]});
+});
+
+document.getElementById("hsl_float").addEventListener("input", function(e){
+    let col = this.value.split(",").map(function(x, i){
+        x = clamp(parseFloat(x), 0, 1);
+        if(isNaN(x)) x = 0;
+        return x;
+    });
+    while(col.length < 3){
+        col.push(0);
+    }
+    set_current_color({rgb: hsl_to_rgb(col), hue: col[0], saturation: col[1]});
+});
+
+document.getElementById("hsv_picker_radio").checked = picker_type == "hsv";
+document.getElementById("hsv_picker_radio").onchange = function(){
+    picker_type = "hsv";
+    regenerate_cursors();
+    regenerate_color();
+    draw();
+};
+document.getElementById("hsl_picker_radio").checked = picker_type == "hsl";
+document.getElementById("hsl_picker_radio").onchange = function(){
+    picker_type = "hsl";
+    regenerate_cursors();
+    regenerate_color();
+    draw();
+};
+
+document.addEventListener("mouseup", function(e){
+    color_cursor_dragging = false;
+    for(const [picker, cursor] of Object.entries(cursors)){
+        cursor.dragging = false;
+    }
+});
+
+canvas.addEventListener("mousedown", function(e){
+    let rect = e.target.getBoundingClientRect();
+    let x = e.clientX - rect.left;
+    let y = e.clientY - rect.top;
+    if(x >= padding && x <= color_width+padding &&
+        y >= padding && y <= color_width+padding && !cursors["hue"].dragging){
+        color_cursor_dragging = true;
+        color_cursor = [x-padding, y-padding];
+        regenerate_color();
+        draw();
+    }
+
+    let start = padding+color_width+margin_right;
+    for(const [picker, cursor] of Object.entries(cursors)){
+        if(x >= start && x <= start+bar_width &&
+            y >= padding && y <= color_width+padding && !color_cursor_dragging){
+            cursor.dragging = true;
+            cursor.value = y-padding;
+            regenerate_color();
+            draw();
+        }
+        start += margin_right+bar_width;
+    }
+
+    check_cursor(x, y);
+});
+
+document.addEventListener("mousemove", function(e){
+    if(!e.target.getBoundingClientRect) return;
+    let rect = canvas.getBoundingClientRect();
+    let x = e.clientX - rect.left;
+    let y = e.clientY - rect.top;
+    if(color_cursor_dragging){
+        x = clamp(x, padding, color_width+padding);
+        y = clamp(y, padding, color_width+padding);
+        color_cursor = [x-padding, y-padding];
+        regenerate_color();
+        draw();
+    }
+
+    let start = padding+color_width+margin_right+bar_width/2;
+    for(const [picker, cursor] of Object.entries(cursors)){
+        if(cursor.dragging){
+            y = clamp(y, padding, color_width+padding);
+            cursor.value = y-padding;
+            regenerate_color();
+            draw();
+        }
+    }
+
+    check_cursor(x, y);
+});
+
+function regenerate_cursors(){
+    if(picker_type == "hsv"){
+        let hsv = rgb_to_hsv(current_color.rgb);
+        hsv[0] = current_color.hue;
+        hsv[1] = current_color.saturation;
+        color_cursor = [hsv[1]*color_width, (1-hsv[2])*color_width];
+    }
+    else if(picker_type == "hsl"){
+        let hsl = rgb_to_hsl(current_color.rgb);
+        hsl[0] = current_color.hue;
+        hsl[1] = current_color.saturation;
+        color_cursor = [hsl[1]*color_width, (1-hsl[2])*color_width];
+    }
+    cursors["hue"].value = current_color.hue*color_width;
+    cursors["alpha"].value = (1-current_color.alpha)*color_width;
+}
+</script>
+</body>
+</html>

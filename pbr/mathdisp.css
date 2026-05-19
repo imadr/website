@@ -1,0 +1,88 @@
+.equation *{
+    font-family: "Inter", sans-serif !important;
+}
+.equation {
+    font-size: 1.2em;
+    line-height: 2;
+}
+.sub {
+    font-size: 0.65em;
+    vertical-align: sub;
+    position: relative;
+}
+.sup {
+    font-size: 0.65em;
+    vertical-align: super;
+    position: relative;
+}
+.fraction {
+    display: inline-block;
+    vertical-align: middle;
+    text-align: center;
+    margin: 0 0.2em;
+}
+.numerator {
+    border-bottom: 2px solid black;
+    padding: 0 0.2em;
+    display: block;
+}
+.denominator {
+    padding: 0 0.2em;
+    display: block;
+}
+.math-centred{
+    text-align: center;
+}
+span.math{
+    font-size: 1em;
+    font-weight: bold;
+}
+.level-1 {
+    font-size: 0.9em;
+}
+.level-2 {
+    font-size: 0.75em;
+}
+.level-3, .level-4, .level-5 {
+    font-size: 0.8em;
+}
+.sup .fraction, .sub .fraction {
+    font-size: 0.8em;
+    line-height: 1.2;
+    margin: 0 0.1em;
+}
+.sup .numerator, .sub .numerator {
+    border-bottom: 1px solid black;
+    padding: 0 0.1em;
+}
+.sup .denominator, .sub .denominator {
+    padding: 0 0.1em;
+}
+.level-2 .fraction, .level-3 .fraction {
+    margin: 0 0.1em;
+}
+.sup.level-1, .sup.level-2, .sup.level-3 {
+    line-height: 0.6;
+}
+span.math .level-1,
+span.math .level-2,
+span.math .level-3 {
+    font-weight: bold;
+}
+.leftparen, .rightparen{
+    display: inline-block;
+    transform: scale(1, 2);
+}
+.integral{
+    display: inline-block;
+    transform: scale(1.5, 2.5);
+    line-height: 0;
+}
+.integral + .sub {
+    vertical-align: baseline;
+    position: relative;
+    top: 1.5em;
+    left: 0.2em;
+    font-size: 0.8em;
+    font-weight: bold;
+}

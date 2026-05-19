@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Raymarching explained interactively</title>
+    <link rel="icon" type="image/x-icon" href="/favicon.ico">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:site" content="@imadr_">
+    <meta name="twitter:title" content="Raymarching Explained Interactively">
+    <meta name="twitter:description" content="Interactive tutorial to learn raymarching">
+    <meta name="twitter:image" content="https://imadrahmoune.com/raymarching_explained_interactively.png">
+    <meta name="twitter:image:alt" content="Raymarching">
+
+    <link rel="stylesheet" href="/css/style.css">
+    <style>
+        li{
+            margin-bottom: 0.5em;
+        }
+        .red{
+            background-color: #ea3333;
+        }
+        .green{
+            background-color: #29c643;
+        }
+        .blue{
+            background-color: #2c66c9;
+        }
+        .orange{
+            background-color: #ff8f00;
+        }
+        .rounded-bg{
+            border-radius: 3px;
+            padding: 1px 5px 1px 5px;
+            color: white;
+            font-family: "mono";
+            font-weight: bold;
+        }
+        .super{
+            vertical-align: super;
+            font-size: 13px;
+            margin-right: 3px;
+        }
+        .equation{
+            font-family: "mono";
+            font-weight: bold;
+            border: none;
+            margin-right: auto;
+            margin-left: auto;
+        }
+        .equation td{
+            padding-bottom: 12px;
+        }
+        .equation td, .equation tr{
+            border: none;
+        }
+        .sqrt-before-before{
+            content: "";
+            width: 5px;
+            height: 30%;
+            position: absolute;
+            border-right: 2px solid;
+            border-top: none;
+            left: 0px;
+            bottom: 10px;
+            transform: skew(20deg);
+        }
+        .sqrt-before{
+            content: "";
+            width: 5px;
+            height: 80%;
+            position: absolute;
+            border-right: 2px solid;
+            border-top: none;
+            left: 4px;
+            top: -3px;
+            transform: skew(-8deg);
+        }
+        .sqrt{
+            padding-left: 10px;
+            position: relative;
+        }
+        .sqrt-overline{
+            border-top: 2px solid var(--color-fg-1);
+            padding-top: 5px;
+            padding-left: 5px;
+        }
+        .norm{
+            letter-spacing: -5px;
+            padding-right: 5px;
+        }
+        #raymarching-play{
+            border: 2px solid black;
+            color: black;
+            background-color: #e6e6e6;
+            border-radius: 3px;
+            padding: 1px 5px 1px 5px;
+            font-family: "mono";
+            font-weight: bold;
+            font-size: 1em;
+            cursor: pointer;
+        }
+        pre{
+            border-radius: inherit !important;
+            padding: inherit !important;
+            margin-bottom: inherit !important;
+            background-color: inherit !important;
+            color: inherit !important;
+            word-wrap: inherit !important;
+            white-space: inherit !important;
+        }
+        .shader-editor{
+            display: flex;
+            width: 100%;
+            height: 400px;
+        }
+        .editor{
+            flex: 1;
+            position: relative;
+        }
+        canvas{
+            padding-left: 0;
+            padding-right: 0;
+            display: block;
+            margin-right: auto;
+            margin-left: auto;
+        }
+        .ace_scrollbar{
+            scrollbar-width: thin;
+        }
+        .compile-button{
+            z-index: 1000;
+            position: absolute;
+            bottom: 0;
+            right: 0;
+            background-color: rgb(22, 119, 255);
+            color: white;
+            border: none;
+            border-radius: 0;
+            border-top-left-radius: 5px;
+            padding: 5px;
+            padding-left: 8px;
+            font-size: 1.5em;
+            cursor: pointer;
+        }
+        .marker{
+            position:absolute;
+            background:rgba(100,200,100,0.5);
+            z-index:20;
+        }
+        #main-canvas{
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100vh;
+            z-index: -1;
+            display: block;
+        }
+    </style>
+<body>
+    <canvas id="main-canvas"></canvas>
+    <nav>
+        <a id="title" href="/">home</a>
+        <span id="navbar-right" style="float: right;">
+        </span>
+    </nav>
+
+    <h1>Raymarching explained interactively</h1>
+
+    <h2 id="introduction"><a href="#introduction">Introduction</a></h2>
+    <p>
+        Raymarching is a 3D rendering technique popular in the <a href="https://en.wikipedia.org/wiki/Demoscene">demoscene</a> and in websites like <a href="https://www.shadertoy.com/">Shadertoy</a>.<br>
+        One of the impressive things about demos is that there is <strong>no 3D geometry whatsoever</strong>. All the objects that make up the scene are generated in real time using mathematical functions.
+    </p>
+    <p>In this interactive tutorial, we will learn how the raymarching algorithm works from the ground up and create our own raymarcher with shaders.</p>
+    <h2 id="signed-distance-function"><a href="#signed-distance-function">Signed distance function</a></h2>
+
+    <p>Before diving into the raymarching algorithm, we need to talk about distances.</p>
+
+    <p>You may be familiar with the formula for the distance between two points, it is known as the <strong>Euclidean distance</strong> and is calculated using the Pythagorean theorem:</p>
+
+    <table class="equation">
+        <tr>
+            <td>
+                EuclideanDistance(<span class="rounded-bg blue">P1</span>,<span class="rounded-bg green">P2</span>)
+            </td>
+            <td>=</td>
+            <td class="sqrt">
+                <span class="sqrt-before-before"></span>
+                <span class="sqrt-before"></span>
+                <span class="sqrt-overline">
+                    (<span class="rounded-bg blue">P1.x</span>-<span class="rounded-bg green">P2.x</span>)<span class="super">2</span>+(<span class="rounded-bg blue">P1.y</span>-<span class="rounded-bg green">P2.y</span>)<span class="super">2</span>
+                </span>
+            </td>
+        </tr>
+        <tr>
+            <td></td>
+            <td>=</td>
+            <td><span class="rounded-bg red" id="euclidean-distance"></span></td>
+        </tr>
+    </table>
+    <br>
+
+    <p style="text-align: center;">You can <strong>interact</strong> by dragging points around</p>
+    <canvas id="canvas-euclidean-distance"></canvas>
+
+    <p>Now instead of two points, imagine we want to calculate the distance between a point and a circle. To do that we first calculate the euclidean distance between the point and the center of the circle, we then substract the radius of the circle:</p>
+    <table class="equation">
+        <tr>
+            <td>
+                DistanceToCircle(<span class="rounded-bg blue">P</span>,<span class="rounded-bg green">C</span>,<span class="rounded-bg orange">R</span>)
+            </td>
+            <td>=</td>
+            <td>
+                EuclideanDistance(<span class="rounded-bg blue">P</span>,<span class="rounded-bg green">C</span>)-<span class="rounded-bg orange">R</span>
+            </td>
+        </tr>
+        <tr>
+            <td></td>
+            <td>=</td>
+            <td><span id="circle-distance" class="rounded-bg red"></span></td>
+        </tr>
+    </table>
+    <canvas id="canvas-circle-sdf"></canvas>
+    <p>Notice that when the point is inside the circle, the distance is negative—hence "signed" distance function. This fact will become useful later on.</p>
+    <p>The <strong>SDF of an object</strong> is a function that, given a point in space as input, outputs the distance from that point to the closest point of the object.</p>
+
+    <p>The SDF of rectangle is a little bit more complicated, <a href="https://www.youtube.com/watch?v=62-pRVZuS5c">here is a very good explanation</a> on how to derive it.</p>
+
+     <table class="equation">
+        <tr>
+            <td>
+                DistanceToRect(<span class="rounded-bg blue">P</span>,<span class="rounded-bg green">C</span>,<span class="rounded-bg orange">Size</span>)
+            </td>
+            <td>=</td>
+            <td><span class="norm">||</span>max(|<span class="rounded-bg blue">P</span>-<span class="rounded-bg green">C</span>|-(<span class="rounded-bg orange">Size</span>/2),0)<span class="norm">||</span></td>
+        </tr>
+        <tr>
+            <td></td>
+            <td>=</td>
+            <td><span id="rect-distance" class="rounded-bg red"></span></td>
+        </tr>
+    </table>
+
+    <canvas id="canvas-rect-sdf"></canvas>
+
+    <p>If we have multiple shapes and we want to find the closets point to <span class="rounded-bg blue">P</span>, we calculate the <span class="rounded-bg red">minimum</span> of all the SDFs of the shapes:</p>
+    <canvas id="canvas-shapes-sdf"></canvas>
+
+    <h2 id="the-raymarching-algorithm"><a href="#the-raymarching-algorithm">The Raymarching algorithm</a></h2>
+
+    <p>The raymarching algorithm goes like this:</p>
+
+    <ol>
+        <li>Set the current <span class="rounded-bg red">point</span> to the camera's <span class="rounded-bg green">origin</span>;</li>
+        <li>Calculate the closest <span class="rounded-bg red">distance</span> between the current <span class="rounded-bg red">point</span> and the objects in the scene using the minimum of their SDFs;</li>
+        <li>The current point is moved along some <span class="rounded-bg blue">direction</span> (a ray) for the distance calculated in step 2;</li>
+        <li>Steps 2 and 3 are repeated until the minimum distance is smaller than some small distance Δ, indicating that we have hit an object;</li>
+        <li>The maximum number of iterations is limited to avoid infinite loops in case no object is hit.</li>
+    </ol>
+
+    <canvas id="canvas-raymarching-1"></canvas>
+
+    <p>The idea is to run the above algorithm to each pixel on the screen. If the ray hits an object, we set the pixel's color to the object's color. Otherwise, we set the pixel to the background's color.</p>
+    <p>You can see the iterations of the algorithm in the demo below. click on <button id="raymarching-play">Play</button> to start the animation. You can also change the <span class="rounded-bg green">camera</span>'s parameters like the field of view or the number of rays we send.</p>
+
+    <canvas id="canvas-raymarching-2"></canvas>
+
+    Near plane: <input style="vertical-align: middle;" type="range" value="60" min="10" max="100" step="1" id="near-plan" autocomplete="off"><br>
+    Field of view: <input style="vertical-align: middle;" type="range" value="25" min="5" max="80" step="1" id="fov" autocomplete="off"><br>
+    Number of rays: <input style="vertical-align: middle;" type="range" value="25" min="2" max="100" step="1" id="nb-rays" autocomplete="off"><br>
+    Iterations: <input style="vertical-align: middle;" type="range" value="5" min="0" max="15" step="1" id="iterations" autocomplete="off"><br>
+
+    <h2 id="going-3d"><a href="#going-3d">Going 3D</a></h2>
+
+    <p>We will apply the exact same algorithm in three dimensions.</p>
+    <p>Just like how we did in 2D, the idea is to send a ray for each pixel on the screen. The view frustum extends from the camera towards the corners of the screen.<br>By iteratively moving the ray along some direction, we test whether we hit an object (if the distance is below a certain minimum) or if the ray goes to infinity (if the distance is above a maximum).</p>
+    <p>You can play with this demo to get a feel for it:</p>
+
+    <div id="scene_3d_viz"></div>
+
+    Near plane: <input style="vertical-align: middle;" type="range" min="0.5" max="3" step="0.01" id="near-plan-3d" autocomplete="off"><br>
+    Field of view: <input style="vertical-align: middle;" type="range" min="5" max="80" step="0.01" id="fov-3d" autocomplete="off"><br>
+    Number of rays: <input style="vertical-align: middle;" type="range" min="1" max="20" step="1" id="nb-rays-3d" autocomplete="off"><br>
+    Iterations: <input style="vertical-align: middle;" type="range" min="0" max="15" step="1" id="iterations-3d" autocomplete="off"><br>
+    <br>
+    <p>I'll skip explaining how to setup a fragment shader like this, you can either use <a href="https://www.shadertoy.com/">shadertoy</a> or draw a fullscreen quad in a custom 3D engine.</p>
+    <p>First, we will display the screen space position of each pixel (multiplied by the aspect ratio). The horizontal position is represented by the red channel, and the vertical position by the green channel.</p>
+    <div class="shader-editor">
+        <canvas id="canvas-webgl-1"></canvas>
+        <div class="editor" id="canvas-webgl-1-editor"></div>
+    </div>
+
+
+
+    <p>The equation of the SDF for a 3D sphere is basically the same for the 2D circle, in this shader we display the depth (distance) of each point in the scene composed of a sphere:</p>
+    <div class="shader-editor">
+        <canvas id="canvas-webgl-2"></canvas>
+        <div class="editor" id="canvas-webgl-2-editor"></div>
+    </div>
+
+    <p>Here we add the SDF for a cube and a plane:</p>
+    <div class="shader-editor">
+        <canvas id="canvas-webgl-3"></canvas>
+        <div class="editor" id="canvas-webgl-3-editor"></div>
+    </div>
+
+    <p>If we return a number id for each object, we can choose a color for each different object. If the ray goes to infinity, we can draw a plain color to draw a basic sky:</p>
+    <div class="shader-editor">
+        <canvas id="canvas-webgl-4"></canvas>
+        <div class="editor" id="canvas-webgl-4-editor"></div>
+    </div>
+
+    <p>And if we compute the normals and do some basic lighting calculations, we can add diffuse shading to our objects:</p>
+    <div class="shader-editor">
+        <canvas id="canvas-webgl-5"></canvas>
+        <div class="editor" id="canvas-webgl-5-editor"></div>
+    </div>
+
+    <h2 id="further-reading"><a href="#further-reading">Futher reading</a></h2>
+    <ul>
+        <li><a href="https://www.iquilezles.org/www/index.htm">Inigo Quilez</a> is the best resource on raymarching.</li>
+    </ul>
+
+    <div id="comments" data-page="raymarching-explained-interactively"></div>
+    <script src="../js/comments.js"></script>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.33.2/ace.min.js" integrity="sha512-40pej1Lz2wywxd9lNJwJNSp9ekNFyX6wCmOzoaqIuUqexcjAUYqnhbg+fYUuPHzVyr5hshGv5FX8Om7yuTuWnA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.33.2/mode-c_cpp.min.js" integrity="sha512-caUbWe+l7h52Yfiut+hnk+W8LT4v3OlrvqVK7AUE7HKhMcFI86cmrD0cshe98P1UpfpsK30mQDzRhkzYwZHzQA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+
+<script src="/js/webgl_helper.js"></script>
+<script src="/js/math.js"></script>
+<script src="/js/light.js"></script>
+<script src="main.js"></script>
+<script src="main2.js"></script>
+</body>
+</html>

@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>How Apple's Liquid Glass (probably) works</title>
+    <link rel="icon" type="image/x-icon" href="/favicon.ico">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:site" content="@imadr_">
+    <meta name="twitter:title" content="How Apple's Liquid Glass (probably) works">
+    <meta name="twitter:description" content="Article explaining how to recreate Apple's Liquid Glass effect">
+    <meta name="twitter:image" content="https://imadrahmoune.com/liquid_glass.png">
+    <meta name="twitter:image:alt" content="How Apple's Liquid Glass (probably) works">
+
+    <link rel="stylesheet" href="/css/style.css">
+    <style>
+        #main-canvas{
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100vh;
+            z-index: -1;
+            display: block;
+        }
+        input[type="range"] {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 300px;
+            height: 10px;
+            background: linear-gradient(to right, #555 50%, #ddd 50%);
+            outline: none;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: var(--thumb-color, #555);
+            cursor: pointer;
+            border: none;
+        }
+
+        input[type="range"]::-moz-range-thumb {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: var(--thumb-color, #555);
+            cursor: pointer;
+            border: none;
+        }
+        .slider-container{
+            width: 60%;
+            margin-left: auto;
+            margin-right: auto;
+        }
+        .slider-container input{
+            width: 100%;
+            margin-top: 1.5em;
+        }
+
+        #sliders {
+            position: absolute;
+            width: 400px;
+            top: 1200px;
+            left: 0px;
+            transition: transform 0.5s ease, opacity 0.5s ease;
+            transform: translateY(0);
+        }
+
+        #sliders.fixed {
+            position: fixed;
+            top: 300px;
+            transform: translateY(100px);
+        }
+    </style>
+</head>
+<body>
+    <canvas id="main-canvas"></canvas>
+    <nav>
+        <a id="title" href="/">home</a>
+        <span id="navbar-right" style="float: right;">
+        </span>
+    </nav>
+
+    <div id="sliders">
+        <div class="slider-container">
+            <label style="font-weight: bold;">SDF strength <span id="sdf-multiplier-value"></span></label><br><input id="sdf-multiplier-input" type="range" min="0" max="500" step="0.01" data-color="#888">
+        </div>
+        <br>
+        <div class="slider-container">
+            <label style="font-weight: bold;">Border radius <span id="radius-value"></span></label><br><input id="radius-input" type="range" min="0" max="0.2" step="0.001" data-color="#888">
+        </div>
+        <br>
+        <div class="slider-container">
+            <label style="font-weight: bold;">Index of refraction <span id="ior-value"></span></label><br><input id="ior-input" type="range" min="0" max="5" step="0.001" data-color="#888">
+        </div>
+        <br>
+        <div class="slider-container">
+            <label style="font-weight: bold;">Glass thickness <span id="thickness-value"></span></label><br><input id="thickness-input" type="range" min="0" max="50" step="0.01" data-color="#888">
+        </div>
+        <br>
+        <div class="slider-container">
+            <label style="font-weight: bold;">Offset Red <span id="offset-r-value"></span></label><br><input id="offset-r-input" type="range" min="-2" max="2" step="0.01" data-color="#888">
+        </div>
+        <br>
+        <div class="slider-container">
+            <label style="font-weight: bold;">Offset Blue <span id="offset-b-value"></span></label><br><input id="offset-b-input" type="range" min="-2" max="2" step="0.01" data-color="#888">
+        </div>
+    </div>
+
+    <h1>How Apple's Liquid Glass (probably) works</h1>
+
+    <br>
+    <img src="apple.jpg" style="max-width: 100%;">
+    <br>
+
+    <p>In WWDC25, Apple introduced a new GUI design called <strong>Liquid Glass</strong>. Regardless of the users reception to Apple's new style, we will try to recreate this effect using shaders.</p>
+    <p>Since I don't have access to an Apple device, I can't reverse engineer the rendering behind Liquid Glass and know for a fact how it works, but the effect is simple enough that it can be reproduced.</p>
+    <h2>The Shape</h2>
+
+    <p>First we need to define the <strong>Shape</strong> of our UI element, I can be a button or a panel or a even text.</p>
+    <p>We will use a mathematical function called a <strong>Signed Distance Functions</strong>, that, given any point in 2D space, returns the distance from that point to our shape.</p>
+    <p>Here we visualize the SDF of a rounded rectangle using grayscale, the darker the color is the closer the current pixel is to our shape.</p>
+
+    <p><strong>You can move aroud the shape by dragging it with the mouse</strong></p>
+    <div id="scene_shape"></div>
+
+    <h2>The Normal</h2>
+    <p>Now we need to compute the normal of your rounded rectangle so that we can make it interact with light in interesting ways.</p>
+    <p>To do that we will "fake" the normal of a 3D rounded shape by using the screen space gradient of the SDF on the X and Y axis, and combine it with a normal on the Z axis based on how close it is to the edge of the shape:</p>
+
+    <div id="scene_normal"></div>
+
+    <h2>Refraction</h2>
+    <p>We are trying to simulate how light would get refracted by our shape as if it was made of glass. To do that we use <strong>Snell's law</strong></p>
+
+    <div id="scene_snells"></div>
+    <div class="slider-container">
+        <label style="font-weight: bold;">Angle</label><br><input id="fresnel-angle-input" type="range" min="-90" max="90" step="0.01" data-color="#888">
+        <label style="font-weight: bold;">IOR 2</label><br><input id="fresnel-ior2-input" type="range" min="1" max="2.5" step="0.01" data-color="#888">
+        <label style="font-weight: bold;">IOR 1</label><br><input id="fresnel-ior1-input" type="range" min="1" max="2.5" step="0.01" data-color="#888">
+    </div>
+    <br>
+
+    <p>Snell's law gives us the angle of refraction of a ray of light passing through a medium, the angle changes depending on the materials <strong>Index of Refraction</strong>.</p>
+    <p>Using <strong>Fresnel equations</strong> we can also compute the amount of light refracted vs reflected by the medium.</p>
+
+    <p>The index of refraction of <strong>glass</strong> is 1.52, for comparison water has an IOR of 1.33.</p>
+
+    <p>Here we can visualize the refracted vector that goes from the camera towards the negative Z axis (towards the screen)</p>
+    <div id="scene_refraction"></div>
+
+    <p>If we use this vector to sample a texture behind it, we can start seeing the "glassy" effect:</p>
+    <div id="scene_refraction_tex"></div>
+
+    <h2>Reflection</h2>
+    <p>Some part of the light is reflected off the glass instead of being refracted, this gives use some specular highlight. Instead of computing realistic physical propreties of the material (using Fresnel equations for example), we will simply mix the refracted and reflected light arbitrarly.</p>
+
+    <p>We compute the reflected vector using the incident vector and the normal:</p>
+    <div id="scene_reflection"></div>
+
+    <p>Adding the reflection to the background gives us:</p>
+    <div id="scene_reflection_tex"></div>
+
+    <p>And combining both refraction and reflection:</p>
+    <div id="scene_refraction_reflection_tex"></div>
+
+    <h2>Smoothly combining shapes</h2>
+
+    <p>Another cool thing about SDFs is that we can smoothly "blend" two shapes by using a special function, you can read more about it here <a href="https://iquilezles.org/articles/smin/">Smooth Minimum - Inigo Quilez</a></p>
+    <div id="scene_sdf_mix"></div>
+
+    <h2>Chromatic Aberration</h2>
+
+    <p>By offsetting the sample coordinates of the red and blue channel of the texture, we can add a chromatic aberration effect</p>
+
+    <div id="scene_chromatic_aberration"></div>
+    <h2>Further Reading</h2>
+
+    <p>This was a quick and dirty article I wrote in an evening, to get the crisp glassy look Apple showcased would need more work.</p>
+    <p>If you want to read more about signed distance functions, I have an article about <a href="../raymarching-explained-interactively/">the Raymarching algorithm</a> which is based on 3D SDFs.</p>
+    <p>You can also find more about 2D (and 3D) SDFs on <a href="https://iquilezles.org/articles/distfunctions2d/">Inigo Quilez's website</a></p>
+
+    <div id="comments" data-page="liquid-glass"></div>
+    <script src="../js/comments.js"></script>
+
+<script src="/js/webgl_helper.js"></script>
+<script src="/js/math.js"></script>
+<script src="/js/light.js"></script>
+<script src="main.js"></script>
+</body>
+</html>

@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Rotations with quaternions</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <link rel="stylesheet" href="/css/highlight.css">
+    <script src="/js/highlight.js"></script>
+    <style>
+        .rot-input{
+            border: none;
+            background-color: transparent;
+            border-radius: 0px;
+            font-family: "mono";
+            font-size: 1em;
+            border-bottom: 2px solid;
+            text-align: center;
+            width: 2em;
+        }
+    </style>
+</head>
+<body>
+    <nav>
+        <a id="title" href="/">home</a>
+        <span id="navbar-right" style="float: right;">
+        </span>
+    </nav>
+
+    <h1>Rotations with quaternions</h1>
+
+    <ul>
+        <li><a href="#introduction">Introduction</a></li>
+        <li><a href="#quaternion-magnitude">Quaternion magnitude</a></li>
+        <li><a href="#quaternion-normalization">Quaternion normalization</a></li>
+        <li><a href="#identity-quaternion">Identity quaternion</a></li>
+        <li><a href="#scaling-quaternion">Scaling a quaternion</a></li>
+        <li><a href="#quaternion-multiplication">Quaternion multiplication</a></li>
+        <li><a href="#euler-angles-to-quaternion">Euler angle to Quaternion</a></li>
+        <li><a href="#axis-angle-to-quaternion">Axis angle to Quaternion</a></li>
+        <li><a href="#quaternion-to-rotation-matrix">Quaternion to rotation matrix</a></li>
+        <li><a href="#quaternion-conjugate">Quaternion conjugate</a></li>
+        <li><a href="#rotating-a-vector-by-a-quaternion">Rotating a vector by a quaternion</a></li>
+        <li><a href="#quaternion-inverse">Quaternion inverse</a></li>
+        <li><a href="#quaternion-difference">Quaternion difference</a></li>
+        <li><a href="#quaternion-exp-log">Quaternion Exp and Log</a></li>
+        <li><a href="#quaternion-exponentiation">Quaternion exponentiation</a></li>
+        <li><a href="#quaternion-slerping">Quaternion slerping</a></li>
+        <li><a href="#quaternion-dot-product">Quaternion dot product</a></li>
+        <li><a href="#fixed-quaternion-slerping">Fixed quaternion slerping</a></li>
+        <li><a href="#source-code">Source code</a></li>
+        <li><a href="#further-reading">Further reading</a></li>
+    </ul>
+
+    <h2 id="introduction"><a href="#introduction">Introduction</a></h2>
+
+    <p>
+        A quaternion is a four dimensional complex-like number. It has two parts: an imaginary (or vector) part with three components, and a real (or scalar) part with one component.<br>
+        $$ q = w+x\textrm{i}+y\textrm{j}+z\textrm{k} $$
+        $$ q = (x,y,z,w) $$
+        $$ \textrm{i}^{2}=\textrm{j}^{2}=\textrm{k}^{2}=\textrm{i}\textrm{j}\textrm{k}=-1 $$
+    </p>
+
+    <p>We represent a quaternion with this data structure:</p>
+    <code>
+<pre class="code language-c">typedef union{
+    float q[4];
+    struct{
+        float x;
+        float y;
+        float z;
+        float w;
+    };
+} Quaternion;
+</pre>
+</code>
+    <p>The four components are usually ordered \(w,x,y,z\) but I like to put \(w\) at the end.</p>
+    <p>Initializing a quaternion:</p>
+<code>
+<pre class="code language-c">Quaternion q = (Quaternion){1, 2, 3, 4};</pre></code>
+
+<p>A quaternion with zero real (or scalar) term is called a <strong>pure quaternion</strong>.</p>
+
+<h2 id="quaternion-magnitude"><a href="#quaternion-magnitude">Quaternion magnitude</a></h2>
+<p>A quaternion is basically a 4 dimensional vector, so it has a magnitude (or norm, or length):</p>
+$$||q|| = \sqrt{x^{2}+y^{2}+z^{2}+w^{2}}$$
+<code>
+    <pre class="code language-c">float quat_magnitude(Quaternion q){
+    return sqrt(q.x*q.x + q.y*q.y + q.z*q.z + q.w*q.w);
+}</pre>
+</code>
+
+<h2 id="quaternion-normalization"><a href="#quaternion-normalization">Quaternion normalization</a></h2>
+<p>A quaternion can be normalized by dividing each component by the magnitude:</p>
+<code>
+    <pre class="code language-c">Quaternion quat_normalize(Quaternion q){
+    float m = quat_magnitude(q);
+    if(m == 0) return (Quaternion){0, 0, 0, 0};
+    return (Quaternion){
+        q.x/m,
+        q.y/m,
+        q.z/m,
+        q.w/m
+    };
+}</pre>
+</code>
+
+<p>A special property of quaternions is that <strong>a unit quaternion (a quaternion with magnitude 1) represents a rotation in 3D space.</strong></p>
+
+<h2 id="identity-quaternion"><a href="#identity-quaternion">Identity quaternion</a></h2>
+
+<p>There is a special quaternion called the <strong>identity quaternion</strong> which corresponds to no rotation:</p>
+<code>
+    <pre class="code language-c">Quaternion quat_id(){
+    return (Quaternion){0, 0, 0, 1};
+}</pre>
+</code>
+
+<p>Geometrically, we can also consider \((0, 0, 0, -1)\) to be an identity quaternion since it corresponds to no rotation.</p>
+
+<h2 id="scaling-quaternion"><a href="#scaling-quaternion">Scaling a quaternion</a></h2>
+
+<p>Scaling a quaternion is multiplying each of its components by a real number (the scalar):</p>
+
+<code>
+<pre class="code language-c">Quaternion quat_scale(Quaternion q, float s){
+    return (Quaternion){q.x*s, q.y*s, q.z*s, q.w*s};
+}</pre>
+</code>
+
+<h2 id="quaternion-multiplication"><a href="#quaternion-multiplication">Quaternion multiplication</a></h2>
+
+<p>Multiplying two unit quaternions represents a <strong>composition of two rotations</strong>.</p>
+
+<p><strong>Quaternion multiplication isn't commutative</strong> (\(q_{1}.q_{2} \ne q_{2}.q_{1}\)). If we want to apply a rotation \(q_{1}\) <strong>then</strong> a rotation \(q_{2}\), the resulting rotation \(q_{3}\) is: </p>
+
+$$q_{3}=q_{2}.q_{1}$$
+
+<p>Quaternion multiplication looks like this:</p>
+<div style="overflow: auto;">
+$$q_{1} = a+b\textrm{i}+c\textrm{j}+d\textrm{k}$$
+$$q_{2} = e+f\textrm{i}+g\textrm{j}+h\textrm{k}$$
+$$\begin{align*} q_{1}.q_{2} = (ae-bf-cg-dh)+(af+be+ch-dg)\textrm{i}+\\
+(ag-bh+ce+df)\textrm{j}+(ah+bg-cf+de)\textrm{k}\end{align*}$$
+</div>
+
+<code>
+    <pre class="code language-c">Quaternion quat_mul(Quaternion a, Quaternion b){
+    return (Quaternion){
+        a.w*b.x + a.x*b.w + a.y*b.z - a.z*b.y,
+        a.w*b.y - a.x*b.z + a.y*b.w + a.z*b.x,
+        a.w*b.z + a.x*b.y - a.y*b.x + a.z*b.w,
+        a.w*b.w - a.x*b.x - a.y*b.y - a.z*b.z
+    };
+}</pre>
+</code>
+
+<h2 id="euler-angles-to-quaternion"><a href="#euler-angles-to-quaternion">Euler angle to Quaternion</a></h2>
+
+<p>We use quaternions instead of Euler angles to represent rotations for a couple of reasons:</p>
+<ul>
+    <li>Euler angles suffer from gimbal lock</li>
+    <li>Interpolating between two Euler angles lead to weird results</li>
+</ul>
+
+<p>We represent the orientation of an object using only a quaternion, then we multiply that orientation by another quaternion to rotate it.</p>
+
+<p>However writing a rotation directly in quaternion form isn't really intuitive, what we do instead is <strong>convert an Euler angle to a quaternion then use it for rotating</strong>.</p>
+
+<p>If we have an Euler angle rotation in the order ZYX (Yaw -> Pitch -> Roll, we can chose any order but must stay consistent), we can convert it to a quaternion like this:</p>
+
+<div style="overflow: auto;">
+$$
+q = \begin{bmatrix}
+\sin(x/2)\cos(y/2)\cos(z/2)-\cos(x/2)\sin(y/2)\sin(z/2) \\
+\cos(x/2)\sin(y/2)\cos(z/2)+\sin(x/2)\cos(y/2)\sin(z/2) \\
+\cos(x/2)\cos(y/2)\sin(z/2)-\sin(x/2)\sin(y/2)\cos(z/2) \\
+\cos(x/2)\cos(y/2)\cos(z/2)+\sin(x/2)\sin(y/2)\sin(z/2)
+\end{bmatrix}
+$$
+</div>
+
+<code>
+    <pre class="code language-c">typedef union{
+    float v[3];
+    struct{
+        float x;
+        float y;
+        float z;
+    };
+} Vector3;
+
+Quaternion euler_to_quat(Vector3 e){
+    float cx = cos(e.x/2);
+    float sx = sin(e.x/2);
+    float cy = cos(e.y/2);
+    float sy = sin(e.y/2);
+    float cz = cos(e.z/2);
+    float sz = sin(e.z/2);
+    return (Quaternion){
+        sx*cy*cz - cx*sy*sz,
+        cx*sy*cz + sx*cy*sz,
+        cx*cy*sz - sx*sy*cz,
+        cx*cy*cz + sx*sy*sz
+    };
+}</pre>
+</code>
+
+<code>
+    <pre class="code language-c">
+typedef struct Transform{
+    Vector3 position;
+    Quaternion rotation;
+    Vector3 scale;
+} Transform;</pre>
+</code>
+
+<code>
+<pre class="code language-c">Transform obj;
+obj.position = (Vector3){0, 0, 0};
+obj.scale = (Vector3){1, 1, 1};
+obj.rotation = quat_id(); // Initially our object isn't rotated
+
+// We rotate the object by PI/4 around the Y axis
+obj.rotation = quat_mul(euler_to_quat((Vector3){0, PI/4, 0}), obj.rotation);
+
+// We rotate again by PI/4 making it a PI/2 rotation around Y
+obj.rotation = quat_mul(euler_to_quat((Vector3){0, PI/4, 0}), obj.rotation);</pre>
+</code>
+
+<br>
+<div style="text-align: center;font-family: 'mono';">
+    <div style="margin-bottom: 9px;">q1 = euler_to_quat(<input autocomplete="off" class="rot-input" type="text" id="rot1-0" value="0">, <input autocomplete="off" class="rot-input" type="text" id="rot1-1" value="π/4">, <input autocomplete="off" class="rot-input" type="text" id="rot1-2" value="0">)
+    </div>
+    <div style="margin-bottom: 9px;">q2 = euler_to_quat(<input autocomplete="off" class="rot-input" type="text" id="rot2-0" value="0">, <input autocomplete="off" class="rot-input" type="text" id="rot2-1" value="π/4">, <input autocomplete="off" class="rot-input" type="text" id="rot2-2" value="0">)
+    </div>
+    <!-- <div style="margin-bottom: 9px;">q1.q2 = (<span id="rot3-0">0</span>, <span id="rot3-1">π/2</span>, <span id="rot3-2">0</span>)
+    </div> -->
+    <canvas id="canvas-mult"></canvas>
+</div>
+
+<h2 id="axis-angle-to-quaternion"><a href="#axis-angle-to-quaternion">Axis angle to Quaternion</a></h2>
+
+If we have a rotation represented by an axis \(\vec{A}\) and an angle \(\theta\), we can convert it to a quaternion like this:
+
+$$
+q = \begin{bmatrix}
+\vec{A}_{x}.\sin{\frac{\theta}{2}}\\
+\vec{A}_{y}.\sin{\frac{\theta}{2}}\\
+\vec{A}_{z}.\sin{\frac{\theta}{2}}\\
+\frac{\cos{\theta}}{2}\\
+\end{bmatrix}
+$$
+
+<code>
+<pre class="code language-c">Quaternion axis_angle_to_quat(Vector3 axis, float angle){
+    float s = sin(angle/2);
+    return (Quaternion){
+        axis.x*s,
+        axis.y*s,
+        axis.z*s,
+        cos(angle/2)
+    };
+}</pre>
+</code>
+
+
+<h2 id="quaternion-to-rotation-matrix"><a href="#quaternion-to-rotation-matrix">Quaternion to rotation matrix</a></h2>
+
+<p>When doing 3D rendering, we pass an MVP (Model View Projection) matrix to a shader to properly display our objects in the scene:</p>
+
+$$\textit{MVP} = M_{\textit{projection}}.M_{\textit{view}}.M_{\textit{model}}$$
+
+<p>The model matrix itself looks like this:</p>
+
+$$M_{\textit{model}} = M_{\textit{scale}}.M_{\textit{rotate}}.M_{\textit{translate}}$$
+
+<p>Each of those matrices is a 4x4 matrix in <a href="https://en.wikipedia.org/wiki/Homogeneous_coordinates">homogeneous coordinates</a>.</p>
+
+<p>We convert a quaternion to a rotation matrix like this:</p>
+
+$$q = (x, y, z, w)$$
+<div style="overflow: auto;">$$
+M_{\textit{rotate}} = \begin{bmatrix}
+1-2yy-2zz && 2xy-2zw && 2xz+2yw && 0 \\
+2xy+2zw && 1-2xx-2zz && 2yz-2xw && 0 \\
+2xz-2yw && 2yz+2xw && 1-2xx-2yy && 0 \\
+0 && 0 && 0 && 1
+\end{bmatrix}
+$$</div>
+
+<p>Graphics APIs (like OpenGL) usually represent matrices in memory in a <strong>column-major notation</strong>, so we have to transpose the matrices in our code:</p>
+
+<code>
+<pre class="code language-c">typedef union{
+    float m[16];
+    struct{
+        float m00; float m10; float m20; float m30;
+        float m01; float m11; float m21; float m31;
+        float m02; float m12; float m22; float m32;
+        float m03; float m13; float m23; float m33;
+    };
+} Mat4;
+
+Mat4 quat_to_matrix(Quaternion q){
+    float xx = q.x*q.x;
+    float yy = q.y*q.y;
+    float zz = q.z*q.z;
+    return (Mat4){
+        1-2*yy-2*zz, 2*q.x*q.y+2*q.z*q.w, 2*q.x*q.z-2*q.y*q.w, 0,
+        2*q.x*q.y-2*q.z*q.w, 1-2*xx-2*zz, 2*q.y*q.z+2*q.x*q.w, 0,
+        2*q.x*q.z+2*q.y*q.w, 2*q.y*q.z-2*q.x*q.w, 1-2*xx-2*yy, 0,
+        0, 0, 0, 1
+    };
+}</pre>
+</code>
+
+<h2 id="quaternion-conjugate"><a href="#quaternion-conjugate">Quaternion conjugate</a></h2>
+<p>The <strong>conjugate</strong> of a quaternion \(q\) is denoted \(q^{*}\):</p>
+
+$$q^{*} = w-x\textrm{i}-y\textrm{j}-z\textrm{k}$$
+
+<code>
+<pre class="code language-c">Quaternion quat_conjugate(Quaternion q){
+    return (Quaternion){-q.x, -q.y, -q.z, q.w};
+}
+</pre>
+</code>
+
+<h2 id="rotating-a-vector-by-a-quaternion"><a href="#rotating-a-vector-by-a-quaternion">Rotating a vector by a quaternion</a></h2>
+
+<p>We can use a quaternion \(q\) to rotate a vector \(v\) directly without converting it to a matrix. First we convert the 3D vector \(v\) to a pure quaternion, then we pre-multiply it by \(q\) and post-multiply it by the conjugate \(q^{*}\):</p>
+
+$$v = (x, y, z) \Rightarrow (x, y, z, 0)$$
+$$v' = (q.v).q^{*}$$
+
+<code>
+<pre class="code language-c">Vector3 rotate_vector(Vector3 v, Quaternion q){
+    Quaternion v_ = (Quaternion){v.x, v.y, v.z, 0};
+    v_ = quat_mul(quat_mul(q, v_), quat_conjugate(q));
+    return (Vector3){v_.x, v_.y, v_.z};
+}</pre>
+</code>
+
+<h2 id="quaternion-inverse"><a href="#quaternion-inverse">Quaternion inverse</a></h2>
+
+<p>The <strong>inverse</strong> of a quaternion \(q\), denoted \(q^{-1}\), is the conjugate divided by the magnitude squared:</p>
+
+$$q^{-1} = \frac{q^{*}}{||q||^{2}}$$
+
+<code>
+<pre class="code language-c">Quaternion quat_inverse(Quaternion q){
+    float m = quat_magnitude(q);
+    if(m == 0) return (Quaternion){0, 0, 0, 0};
+    m *= m;
+    return (Quaternion){-q.x/m, -q.y/m, -q.z/m, q.w/m};
+}</pre>
+</code>
+
+<p>For unit quaternions, <strong>the conjugate is equal to the inverse</strong>.<br>
+Multiplying a quaternion by its inverse results in the identity quaternion:</p>
+$$q.q^{-1} = (0, 0, 0, 1)$$
+
+<h2 id="quaternion-difference"><a href="#quaternion-difference">Quaternion difference</a></h2>
+
+<p>The <strong>difference</strong> of two quaternions \(q_{1}\) and \(q_{2}\) is another quaternion \(q_{3}\) that rotates from \(q_{1}\) to \(q_{2}\):</p>
+
+$$q_{3} = q_{1}^{-1}.q_{2}$$
+
+<code>
+<pre class="code language-c">Quaternion quat_difference(Quaternion a, Quaternion b){
+    return quat_mul(quat_inverse(a), b);
+}</pre>
+</code>
+
+<h2 id="quaternion-exp-log"><a href="#quaternion-exp-log">Quaternion Exp and Log</a></h2>
+
+<p>The <strong>exponential</strong> and the <strong>logarithm</strong> of a quaternion won't be very useful by themselves, but we will use them to compute other functions later.</p>
+<p>Given a quaternion \(q = (x,y,z,w)\) and its vector part \(v = (x,y,z)\), the exponential of that quaternion is also a quaternion, and it's given by this formula:</p>
+
+$$\exp(q) = \exp(w)\begin{pmatrix}
+\frac{v_{x}}{||v||}\sin(||v||)\\
+\frac{v_{y}}{||v||}\sin(||v||)\\
+\frac{v_{z}}{||v||}\sin(||v||)\\
+\cos(||v||)
+\end{pmatrix}$$
+<code>
+<pre class="code language-c">Quaternion quat_exp(Quaternion q){
+    Vector3 v = (Vector3){q.x, q.y, q.z};
+    float v_m = Vector3_magnitude(v);
+    Vector3 v_n = Vector3_normalize(v);
+    float sin_v = sin(v_m);
+    float exp_w = exp(q.w);
+    return (Quaternion){
+        v_n.x*sin_v*exp_w,
+        v_n.y*sin_v*exp_w,
+        v_n.z*sin_v*exp_w,
+        cos(v_m)*exp_w
+    };
+}</pre>
+</code>
+
+<p>The logarithm of a quaternion is also a quaternion and is given by this formula:</p>
+
+$$\log(q) = \begin{pmatrix}
+\frac{v_{x}}{||v||}\arccos(\frac{w}{||q||})\\
+\frac{v_{y}}{||v||}\arccos(\frac{w}{||q||})\\
+\frac{v_{z}}{||v||}\arccos(\frac{w}{||q||})\\
+\log(||q||)
+\end{pmatrix}$$
+
+<code>
+<pre class="code language-c">Quaternion quat_log(Quaternion q){
+    Vector3 v = (Vector3){q.x, q.y, q.z};
+    Vector3 v_n = Vector3_normalize(v);
+    float m = quat_magnitude(q);
+    float a = acos(q.w/m);
+    return (Quaternion){
+        v_n.x*a,
+        v_n.y*a,
+        v_n.z*a,
+        log(m)
+    };
+}</pre>
+</code>
+
+<h2 id="quaternion-exponentiation"><a href="#quaternion-exponentiation">Quaternion exponentiation</a></h2>
+
+<p>Raising a quaternion to a power results in either a fraction or a multiple of that quaternion. \(q^{2}\) represents twice the rotation of \(q\), and \(q^{\frac{1}{2}}\) represents half of that rotation.</p>
+
+$$q^{n} = \exp(n\log(q))$$
+
+<code>
+<pre class="code language-c">Quaternion quat_pow(Quaternion q, float n){
+    return quat_exp(quat_scale(quat_log(q), n));
+}
+</pre>
+</code>
+
+<h2 id="quaternion-slerping"><a href="#quaternion-slerping">Quaternion slerping</a></h2>
+
+<p>Arguably one of the most important advantages of quaternions, "Slerp" stands for <strong>spherical linear interpolation</strong>. It's a function that takes three parameters: a quaternion \(q_{1}\), a quaternion \(q_{2}\), and an interpolation parameter \(t\) that goes from \(0\) to \(1\). It gives us an intermediate rotation depending on the value of \(t\).</p>
+
+<div style="overflow: auto;">
+$$\textrm{slerp}(q_{1}, q_{2}, t) = q_{1}(q_{1}^{-1}q_{2})^{t}$$
+</div>
+
+<code>
+<pre class="code language-c">Quaternion quat_slerp(Quaternion q1, Quaternion q2, float t){
+    t = t < 0 ? 0 : t;
+    t = t > 1 ? 1 : t;
+    return quat_mul(q1, quat_pow(quat_mul(quat_inverse(q1), q2), t));
+}</pre>
+</code>
+
+<p>Here is an interactive demo showing a cube slerping from Euler angle \((0, -\frac{3\pi}{2}, 0)\) to \((0, 0, 0)\):</p>
+
+<div style="text-align: center;">
+<div style="font-family: 'mono';">t = <span id="t-value-lerp">0.00</span></div>
+<button id="play-demo-lerp" style="width: 60px;">Play</button> <input style="vertical-align: bottom;" type="range" min="0" max="1" value="0" autocomplete="off" step="0.001" id="slerp-slider-lerp">
+<br>
+<br>
+<canvas id="canvas-lerp"></canvas>
+</div>
+
+<p>Well that doesn't look quite right, the cube is doing a \(\frac{3\pi}{2}\) rotation counterclockwise on the Y axis, when a \(\frac{\pi}{2}\) clockwise rotation would have suffised. To fix that we will use the quaternion dot product.</p>
+
+<h2 id="quaternion-dot-product"><a href="#quaternion-dot-product">Quaternion dot product</a></h2>
+
+<p>The quaternion <strong>dot product</strong> (not to be confused with quaternion multiplication) is analogous to the vector dot product, in the sense that it is a measure of how similar two quaternions are.</p>
+
+$$q_{1} = a+b\textrm{i}+c\textrm{j}+d\textrm{k}$$
+$$q_{2} = e+f\textrm{i}+g\textrm{j}+h\textrm{k}$$
+$$
+q_{1} \bullet q_{2} = ae+bf+cg+dh
+$$
+
+<code>
+<pre class="code language-c">float quat_dot(Quaternion q1, Quaternion q2){
+    return q1.x*q2.x + q1.y*q2.y + q1.z*q2.z + q1.w*q2.w;
+}</pre>
+</code>
+
+<h2 id="fixed-quaternion-slerping"><a href="#fixed-quaternion-slerping">Fixed quaternion slerping</a></h2>
+
+<p>With the dot product we check if two quaternions are on opposite hemispheres, if they are we interpolate between \(q_{1}\) and \(-q_{2}\) instead of \(q_{2}\):</p>
+
+<div style="overflow: auto;">
+$$
+\textrm{slerp}(q_{1}, q_{2}, t) =
+\begin{cases}
+    q_{1}(q_{1}^{-1}q_{2})^{t},& \text{if   } q_{1} \bullet q_{2} > 0\\
+    q_{1}(q_{1}^{-1}(-q_{2}))^{t},& \text{otherwise}
+\end{cases}
+$$
+</div>
+
+<code>
+<pre class="code language-c">Quaternion quat_slerp(Quaternion q1, Quaternion q2, float t){
+    t = t < 0 ? 0 : t;
+    t = t > 1 ? 1 : t;
+    if(quat_dot(q1, q2) < 0) q2 = quat_scale(q2, -1);
+    return quat_mul(q1, quat_pow(quat_mul(quat_inverse(q1), q2), t));
+}</pre>
+</code>
+
+<p>Here is another  demo showing the cube slerping from Euler angle \((0, -\frac{3\pi}{2}, 0)\) to \((0, 0, 0)\), this time taking the shortest path for the rotation:</p>
+
+<div style="text-align: center;">
+<div style="font-family: 'mono';">t = <span id="t-value-lerp-fixed">0.00</span></div>
+<button id="play-demo-lerp-fixed" style="width: 60px;">Play</button> <input style="vertical-align: bottom;" type="range" min="0" max="1" value="0" autocomplete="off" step="0.001" id="slerp-slider-lerp-fixed">
+<br>
+<br>
+<canvas id="canvas-lerp-fixed"></canvas>
+</div>
+
+<h2 id="source-code"><a href="#source-code">Source code</a></h2>
+
+<ul>
+    <li><a href="quaternion.c">quaternion.c</a></li>
+    <li><a href="quaternion.h">quaternion.h</a></li>
+</ul>
+
+<h2 id="further-reading"><a href="#further-reading">Further reading</a></h2>
+
+<ul>
+    <li><a href="https://marctenbosch.com/quaternions/">Let's remove Quaternions from every 3D Engine</a></li>
+    <li><a href="https://omar-shehata.medium.com/how-to-fix-gimbal-lock-in-n-dimensions-f2f7baec2b5e/">How to Fix Gimbal Lock in N-Dimensions</a></li>
+    <li><a href="http://number-none.com/product/Understanding%20Slerp,%20Then%20Not%20Using%20It/">Understanding Slerp, Then Not Using It</a></li>
+    <li><a href="https://www.astro.rug.nl/software/kapteyn-beta/_downloads/attitude.pdf">Representing Attitude: Euler Angles, Unit Quaternions, and RotationVectors</a></li>
+    <li><a href="https://eater.net/quaternions">Visualizing quaternions, an explorable video series</a></li>
+</ul>
+
+<br><br>
+
+<script src="/js/math.js"></script>
+<script src="/js/webgl_helper.js"></script>
+<script src="teapot.js"></script>
+<script src="main.js"></script>
+
+<script src="/js/light.js"></script>
+<script>
+document.addEventListener("DOMContentLoaded", function(e){
+    document.querySelectorAll(".code").forEach(function(block){
+        hljs.highlightBlock(block);
+    });
+});
+</script>
+</body>
+</html>
